@@ -1,0 +1,30 @@
+[
+  {
+    "id": "fd-rates-retail-2026-04",
+    "title": "Retail Fixed Deposit Interest Rates",
+    "category": "FD Services",
+    "contentType": "rate_table",
+    "branchIds": ["default"],
+    "language": "en-IN",
+    "effectiveFrom": "2026-04-01",
+    "effectiveTo": null,
+    "version": "2026.04",
+    "approvedBy": "Treasury and Retail Deposits",
+    "source": "Retail Deposit Rate Card 2026/04",
+    "tags": ["fd", "fixed deposit", "interest rate", "senior citizen", "term deposit"],
+    "content": "Retail fixed deposit rates for deposits below INR 2 crore effective 2026-04-01: 7 to 14 days regular 3.50% senior citizen 4.00%; 15 to 45 days regular 4.00% senior citizen 4.50%; 46 to 179 days regular 5.25% senior citizen 5.75%; 180 days to less than 1 year regular 6.25% senior citizen 6.75%; 1 year to less than 2 years regular 6.80% senior citizen 7.30%; 2 years to less than 3 years regular 7.10% senior citizen 7.60%; 3 years to 5 years regular 6.90% senior citizen 7.40%. Senior citizen benefit is an additional 0.50% over the regular rate for eligible resident senior citizens. Staff must confirm the live CBS rate card before booking.",
+    "structuredFacts": {
+      "currency": "INR",
+      "maxRetailAmount": 20000000,
+      "rates": [
+        { "tenure": "7 to 14 days", "regular": 3.50, "seniorCitizen": 4.00 },
+        { "tenure": "15 to 45 days", "regular": 4.00, "seniorCitizen": 4.50 },
+        { "tenure": "46 to 179 days", "regular": 5.25, "seniorCitizen": 5.75 },
+        { "tenure": "180 days to less than 1 year", "regular": 6.25, "seniorCitizen": 6.75 },
+        { "tenure": "1 year to less than 2 years", "regular": 6.80, "seniorCitizen": 7.30 },
+        { "tenure": "2 years to less than 3 years", "regular": 7.10, "seniorCitizen": 7.60 },
+        { "tenure": "3 years to 5 years", "regular": 6.90, "seniorCitizen": 7.40 }
+      ]
+    }
+  }
+]

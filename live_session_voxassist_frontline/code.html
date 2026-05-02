@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Main Interaction Dashboard - VoxAssist Frontline</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-family: 'Material Symbols Outlined';
+            font-weight: normal;
+            font-style: normal;
+            font-size: 20px;
+            line-height: 1;
+            letter-spacing: normal;
+            text-transform: none;
+            display: inline-block;
+            white-space: nowrap;
+            word-wrap: normal;
+            direction: ltr;
+            font-feature-settings: 'liga';
+            -webkit-font-feature-settings: 'liga';
+            -webkit-font-smoothing: antialiased;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed": "#ffdbcd",
+                        "on-tertiary-container": "#d4815d",
+                        "on-primary-fixed-variant": "#24467c",
+                        "secondary-container": "#d0e1fb",
+                        "error-container": "#ffdad6",
+                        "inverse-on-surface": "#f1f0f5",
+                        "surface-container-high": "#e8e7ed",
+                        "on-background": "#1a1b1f",
+                        "surface-dim": "#dad9df",
+                        "surface-variant": "#e3e2e7",
+                        "on-primary-fixed": "#001b3f",
+                        "background": "#faf9fe",
+                        "primary": "#00193c",
+                        "on-secondary": "#ffffff",
+                        "surface-container-low": "#f4f3f8",
+                        "surface-container": "#eeedf2",
+                        "on-surface": "#1a1b1f",
+                        "secondary": "#505f76",
+                        "on-surface-variant": "#43474f",
+                        "on-error-container": "#93000a",
+                        "surface-tint": "#3e5e95",
+                        "tertiary-fixed-dim": "#ffb597",
+                        "tertiary-container": "#541d02",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-fixed-variant": "#38485d",
+                        "on-primary-container": "#7796d1",
+                        "inverse-surface": "#2f3034",
+                        "outline-variant": "#c4c6d1",
+                        "on-tertiary-fixed": "#360f00",
+                        "on-primary": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "primary-fixed": "#d7e2ff",
+                        "surface-container-highest": "#e3e2e7",
+                        "secondary-fixed": "#d3e4fe",
+                        "secondary-fixed-dim": "#b7c8e1",
+                        "on-error": "#ffffff",
+                        "inverse-primary": "#abc7ff",
+                        "outline": "#747781",
+                        "surface-bright": "#faf9fe",
+                        "error": "#ba1a1a",
+                        "primary-container": "#002d62",
+                        "on-tertiary-fixed-variant": "#743417",
+                        "primary-fixed-dim": "#abc7ff",
+                        "on-secondary-fixed": "#0b1c30",
+                        "on-secondary-container": "#54647a",
+                        "tertiary": "#330e00",
+                        "surface": "#faf9fe"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "unit": "4px",
+                        "component-gap-sm": "8px",
+                        "container-padding": "24px",
+                        "gutter": "16px",
+                        "section-margin": "24px",
+                        "component-gap-xs": "4px",
+                        "component-gap-md": "12px"
+                    },
+                    "fontFamily": {
+                        "h2": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "tabular-nums": ["Inter"],
+                        "body-base": ["Inter"],
+                        "h3": ["Inter"],
+                        "h1": ["Inter"],
+                        "label-caps": ["Inter"]
+                    },
+                    "fontSize": {
+                        "h2": ["18px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "letterSpacing": "0", "fontWeight": "400" }],
+                        "tabular-nums": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+                        "body-base": ["14px", { "lineHeight": "20px", "letterSpacing": "0", "fontWeight": "400" }],
+                        "h3": ["16px", { "lineHeight": "20px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "h1": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background h-screen w-screen overflow-hidden flex flex-col font-body-base text-body-base">
+<!-- TopNavBar -->
+<header class="bg-white dark:bg-slate-950 font-sans text-sm tracking-tight w-full top-0 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center px-6 h-14 flex-shrink-0 z-10">
+<div class="flex items-center gap-6">
+<span class="text-lg font-black text-blue-900 dark:text-blue-50">VoxAssist Frontline</span>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-blue-900 dark:text-blue-400 border-b-2 border-blue-900 dark:border-blue-400 font-semibold h-14 flex items-center hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors" href="#">Dashboard</a>
+<a class="text-slate-500 dark:text-slate-400 h-14 flex items-center hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors" href="#">Analytics</a>
+<a class="text-slate-500 dark:text-slate-400 h-14 flex items-center hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors" href="#">History</a>
+</nav>
+</div>
+<div class="flex items-center gap-4 border border-outline-variant rounded bg-surface px-3 py-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-outline" style="font-size: 16px;">search</span>
+<input class="bg-transparent border-none p-0 focus:ring-0 font-tabular-nums text-tabular-nums text-on-surface w-24" placeholder="Acct #" type="text" value="1234-****"/>
+</div>
+<div class="h-4 w-px bg-outline-variant"></div>
+<div class="flex items-center gap-1.5 bg-primary-fixed text-on-primary-fixed px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+                Marathi Auto
+            </div>
+<div class="h-4 w-px bg-outline-variant"></div>
+<div class="font-tabular-nums text-tabular-nums text-on-surface font-semibold">
+                04:12
+            </div>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors p-1 rounded">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors p-1 rounded">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<button class="text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors p-1 rounded">
+<span class="material-symbols-outlined">help</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-variant border border-outline-variant overflow-hidden">
+<img alt="Staff Avatar" class="w-full h-full object-cover" data-alt="professional staff avatar icon with initials" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBrIUljdupBDsqdKdTKszRzHp5kq5-58hHoOQSo59-SAO5EzFrloW_HO6qEmiWyQE9CkLUrE8H7ULWcRzzyneNp77lywGVO_b5S3MpZwwz5lzZQ492njkuRC4keo-38yhwKVIFgE5Vt6JVE5IBiaOybR9PORetOjFTleXoFX9jDAW0rpVO_lU4lsWmRtyyw39K7-gw2ddOLlCiO79gkJadagXC8VcJmmDyV3G_E9i-ahHxEO930LViIJZRWIhQo8uolp_R1kawhMFdH"/>
+</div>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<!-- SideNavBar -->
+<nav class="bg-slate-50 dark:bg-slate-950 font-sans text-xs font-medium uppercase h-full border-r border-slate-200 dark:border-slate-800 w-64 flex flex-col py-4 flex-shrink-0 transition-all duration-150 ease-in-out">
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-variant border border-outline-variant overflow-hidden">
+<img alt="Manager Profile" class="w-full h-full object-cover" data-alt="manager profile avatar icon with initials" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCwWrnUbci8XNI9HEm1XmoJ5sZvxAqeGEPGIeVRTZNHsjO2fxUvsYlpiL-BYUwkyiqMMkO89zB6Pt3LyTo9se29-nV8pn_TOeKby4pvFeo8gT_Plfjirp6Kr-adzVYHdGFFhrMYqAtZn_3zeSFjk_yZthcRsTmkWOIrfOjYYihv2zh4s_QobhIvCkkMyBZh-UgIJL3UNGgO9zbjMGWxPEGnPQNa7btYbPL6A2IFsJUeDPNrK4FI-mwni5_MatBUR_t14FrCmvlBxcCC"/>
+</div>
+<div>
+<div class="text-blue-900 dark:text-blue-50 font-bold text-sm leading-tight tracking-normal capitalize">Branch Portal</div>
+<div class="text-[10px] text-slate-500 normal-case">Central District</div>
+</div>
+</div>
+<div class="flex-1 flex flex-col gap-1">
+<a class="bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-300 border-r-4 border-blue-900 dark:border-blue-400 flex items-center gap-3 px-6 py-3 hover:bg-slate-100 dark:hover:bg-slate-900" href="#">
+<span class="material-symbols-outlined" style="font-size: 18px;">mic</span>
+                    Live Session
+                </a>
+<a class="text-slate-600 dark:text-slate-400 flex items-center gap-3 px-6 py-3 hover:bg-slate-100 dark:hover:bg-slate-900" href="#">
+<span class="material-symbols-outlined" style="font-size: 18px;">history</span>
+                    Records
+                </a>
+<a class="text-slate-600 dark:text-slate-400 flex items-center gap-3 px-6 py-3 hover:bg-slate-100 dark:hover:bg-slate-900" href="#">
+<span class="material-symbols-outlined" style="font-size: 18px;">gavel</span>
+                    Compliance
+                </a>
+<a class="text-slate-600 dark:text-slate-400 flex items-center gap-3 px-6 py-3 hover:bg-slate-100 dark:hover:bg-slate-900" href="#">
+<span class="material-symbols-outlined" style="font-size: 18px;">monitoring</span>
+                    Insights
+                </a>
+<a class="text-slate-600 dark:text-slate-400 flex items-center gap-3 px-6 py-3 hover:bg-slate-100 dark:hover:bg-slate-900" href="#">
+<span class="material-symbols-outlined" style="font-size: 18px;">group</span>
+                    Team
+                </a>
+</div>
+<div class="mt-auto flex flex-col gap-1 pt-4 border-t border-slate-200 dark:border-slate-800">
+<a class="text-slate-600 dark:text-slate-400 flex items-center gap-3 px-6 py-3 hover:bg-slate-100 dark:hover:bg-slate-900" href="#">
+<span class="material-symbols-outlined" style="font-size: 18px;">support_agent</span>
+                    Support
+                </a>
+<a class="text-slate-600 dark:text-slate-400 flex items-center gap-3 px-6 py-3 hover:bg-slate-100 dark:hover:bg-slate-900" href="#">
+<span class="material-symbols-outlined" style="font-size: 18px;">logout</span>
+                    Logout
+                </a>
+</div>
+</nav>
+<!-- Main Workspace: Dense 3-Column Layout -->
+<main class="flex-1 flex gap-component-gap-sm p-component-gap-sm bg-surface-container-low overflow-hidden pb-20">
+<!-- Left Column: Live Transcript -->
+<section class="flex-1 min-w-0 bg-surface border border-outline-variant rounded-DEFAULT flex flex-col">
+<header class="px-gutter py-component-gap-md border-b border-outline-variant bg-surface-bright flex justify-between items-center rounded-t-DEFAULT">
+<h2 class="font-h3 text-h3 text-on-surface">Live Transcript</h2>
+<span class="material-symbols-outlined text-outline" style="font-size: 18px;">format_quote</span>
+</header>
+<div class="flex-1 overflow-y-auto p-gutter flex flex-col gap-component-gap-md bg-surface-bright">
+<!-- Customer Bubble -->
+<div class="flex flex-col gap-1 max-w-[85%] self-start">
+<span class="font-label-caps text-label-caps text-outline ml-1">Customer (Marathi)</span>
+<div class="bg-surface-variant text-on-surface-variant font-body-sm text-body-sm p-component-gap-md rounded-lg rounded-tl-none border border-outline-variant/50">
+                            माझे क्रेडिट कार्ड हरवले आहे आणि मला ते ब्लॉक करायचे आहे.
+                        </div>
+</div>
+<!-- Staff Bubble (Translation) -->
+<div class="flex flex-col gap-1 max-w-[85%] self-start ml-4 border-l-2 border-primary-container pl-3">
+<span class="font-label-caps text-label-caps text-primary-container">Auto-Translation</span>
+<div class="text-on-surface font-body-sm text-body-sm italic">
+                            "I have lost my credit card and I want to block it."
+                        </div>
+</div>
+<!-- Customer Bubble -->
+<div class="flex flex-col gap-1 max-w-[85%] self-start mt-4">
+<span class="font-label-caps text-label-caps text-outline ml-1">Customer (Marathi)</span>
+<div class="bg-surface-variant text-on-surface-variant font-body-sm text-body-sm p-component-gap-md rounded-lg rounded-tl-none border border-outline-variant/50">
+                            शेवटचा व्यवहार मी काल संध्याकाळी केला होता.
+                        </div>
+</div>
+<!-- Staff Bubble (Translation) -->
+<div class="flex flex-col gap-1 max-w-[85%] self-start ml-4 border-l-2 border-primary-container pl-3">
+<span class="font-label-caps text-label-caps text-primary-container">Auto-Translation</span>
+<div class="text-on-surface font-body-sm text-body-sm italic">
+                            "The last transaction I made was yesterday evening."
+                        </div>
+</div>
+</div>
+</section>
+<!-- Middle Column: Agentic Workspace -->
+<section class="flex-[1.2] min-w-0 bg-surface border border-outline-variant rounded-DEFAULT flex flex-col">
+<header class="px-gutter py-component-gap-md border-b border-outline-variant bg-surface-bright flex justify-between items-center rounded-t-DEFAULT">
+<h2 class="font-h3 text-h3 text-on-surface">Agentic Workspace</h2>
+<span class="material-symbols-outlined text-outline" style="font-size: 18px;">smart_toy</span>
+</header>
+<div class="flex-1 overflow-y-auto p-gutter flex flex-col gap-section-margin bg-surface-bright">
+<!-- Suggested Actions -->
+<div class="flex flex-col gap-component-gap-sm">
+<span class="font-label-caps text-label-caps text-on-surface-variant">Suggested Actions</span>
+<div class="flex gap-component-gap-sm">
+<button class="flex-1 bg-primary text-on-primary font-tabular-nums text-tabular-nums px-component-gap-md py-2 rounded-DEFAULT flex items-center justify-center gap-2 hover:bg-primary-container transition-colors">
+<span class="material-symbols-outlined" style="font-size: 16px;">block</span>
+                                Initiate Card Block
+                            </button>
+<button class="flex-1 bg-surface text-primary font-tabular-nums text-tabular-nums px-component-gap-md py-2 rounded-DEFAULT border border-primary flex items-center justify-center gap-2 hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined" style="font-size: 16px;">receipt_long</span>
+                                Verify Recent TXN
+                            </button>
+</div>
+</div>
+<!-- Active Context Form -->
+<div class="flex flex-col gap-component-gap-sm flex-1">
+<div class="flex justify-between items-end border-b border-outline-variant pb-2 mb-2">
+<span class="font-label-caps text-label-caps text-on-surface-variant">Active Context Details</span>
+<span class="font-body-sm text-body-sm text-primary flex items-center gap-1"><span class="material-symbols-outlined" style="font-size: 14px;">check_circle</span> Auto-filled</span>
+</div>
+<div class="grid grid-cols-2 gap-component-gap-md">
+<div class="flex flex-col gap-component-gap-xs">
+<label class="font-label-caps text-label-caps text-on-surface">Customer Name</label>
+<div class="relative">
+<input class="w-full bg-surface-container-lowest border-2 border-primary text-on-surface font-body-base text-body-base px-3 py-1.5 rounded-DEFAULT focus:outline-none" readonly="" type="text" value="Rajesh Kumar"/>
+<span class="material-symbols-outlined text-primary absolute right-2 top-2" style="font-size: 16px; font-variation-settings: 'FILL' 1;">colors_spark</span>
+</div>
+</div>
+<div class="flex flex-col gap-component-gap-xs">
+<label class="font-label-caps text-label-caps text-on-surface">PAN Number</label>
+<div class="relative">
+<input class="w-full bg-surface-container-lowest border-2 border-primary text-on-surface font-body-base text-body-base px-3 py-1.5 rounded-DEFAULT focus:outline-none" readonly="" type="text" value="ABCDE1234F"/>
+<span class="material-symbols-outlined text-primary absolute right-2 top-2" style="font-size: 16px; font-variation-settings: 'FILL' 1;">colors_spark</span>
+</div>
+</div>
+<div class="flex flex-col gap-component-gap-xs col-span-2">
+<label class="font-label-caps text-label-caps text-on-surface">Card Ending In</label>
+<input class="w-full bg-surface-container-lowest border border-outline-variant text-on-surface font-body-base text-body-base px-3 py-1.5 rounded-DEFAULT focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" readonly="" type="text" value="8821"/>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Right Column: SOPs & Guardrails -->
+<section class="flex-1 min-w-0 bg-surface border border-outline-variant rounded-DEFAULT flex flex-col">
+<header class="px-gutter py-component-gap-md border-b border-outline-variant bg-surface-bright flex justify-between items-center rounded-t-DEFAULT">
+<h2 class="font-h3 text-h3 text-on-surface">SOPs &amp; Guardrails</h2>
+<span class="material-symbols-outlined text-outline" style="font-size: 18px;">policy</span>
+</header>
+<div class="flex-1 overflow-y-auto p-gutter flex flex-col gap-component-gap-md bg-surface-bright">
+<!-- Search -->
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-2 text-outline" style="font-size: 16px;">search</span>
+<input class="w-full bg-surface border border-outline-variant text-on-surface font-body-sm text-body-sm pl-9 pr-3 py-1.5 rounded-DEFAULT focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary" placeholder="Search policies..." type="text"/>
+</div>
+<!-- Destructive Alert -->
+<div class="bg-error-container text-on-error-container p-component-gap-md rounded-DEFAULT flex gap-3 items-start border border-error/20">
+<span class="material-symbols-outlined text-error mt-0.5" style="font-size: 18px; font-variation-settings: 'FILL' 1;">warning</span>
+<div class="flex flex-col gap-1">
+<span class="font-tabular-nums text-tabular-nums font-bold">Non-compliant statement detected</span>
+<span class="font-body-sm text-body-sm opacity-90">Avoid confirming unauthorized charges before verifying identity fully. Follow Script B.</span>
+</div>
+</div>
+<!-- Accordion SOP -->
+<div class="border border-outline-variant rounded-DEFAULT overflow-hidden">
+<div class="bg-surface-container-low px-component-gap-md py-2 flex justify-between items-center cursor-pointer border-b border-outline-variant">
+<span class="font-tabular-nums text-tabular-nums text-on-surface">Card Blocking Protocol</span>
+<span class="material-symbols-outlined text-outline" style="font-size: 18px;">expand_more</span>
+</div>
+<div class="p-component-gap-md bg-surface font-body-sm text-body-sm text-on-surface-variant flex flex-col gap-2">
+<p>1. Authenticate customer using 2 out of 3 points (DOB, Address, Last TXN).</p>
+<p>2. Confirm which card is lost (last 4 digits).</p>
+<p>3. Initiate block via system and read confirmation statement.</p>
+</div>
+</div>
+<div class="border border-outline-variant rounded-DEFAULT overflow-hidden">
+<div class="bg-surface-container-low px-component-gap-md py-2 flex justify-between items-center cursor-pointer">
+<span class="font-tabular-nums text-tabular-nums text-on-surface">Premature FD Withdrawal</span>
+<span class="material-symbols-outlined text-outline" style="font-size: 18px;">chevron_right</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+</div>
+<!-- BottomNavBar -->
+<footer class="bg-white dark:bg-slate-950 font-sans text-[10px] font-bold uppercase tracking-wider border-t border-slate-200 dark:border-slate-800 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] fixed bottom-0 w-full z-50 flex justify-center items-center gap-8 py-3 px-10">
+<button class="flex flex-col items-center justify-center text-slate-600 dark:text-slate-400 px-6 py-2 hover:text-blue-900 dark:hover:text-blue-300 transform active:scale-95 transition-transform">
+<span class="material-symbols-outlined mb-1" style="font-size: 24px;">mic_off</span>
+<span>Mute</span>
+</button>
+<button class="flex flex-col items-center justify-center bg-blue-900 text-white rounded-md px-12 py-3 transform active:scale-95 transition-transform shadow-lg shadow-blue-900/20">
+<span class="material-symbols-outlined mb-1" style="font-size: 28px; font-variation-settings: 'FILL' 1;">mic</span>
+<span class="text-xs">Push-to-Talk</span>
+</button>
+<button class="flex flex-col items-center justify-center text-slate-600 dark:text-slate-400 px-6 py-2 hover:text-blue-900 dark:hover:text-blue-300 transform active:scale-95 transition-transform">
+<span class="material-symbols-outlined mb-1" style="font-size: 24px;">call_end</span>
+<span>End Session</span>
+</button>
+</footer>
+</body></html>

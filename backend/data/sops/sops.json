@@ -1,0 +1,100 @@
+[
+  {
+    "id": "sop-cards-lost",
+    "title": "Lost Credit Card — Card Blocking Protocol",
+    "category": "Card Support",
+    "content": "1. Authenticate customer using 2 out of 3 identity points (DOB, Address, Last TXN). 2. Confirm which card is lost by asking for the last 4 digits. 3. Initiate card block via CBS system and read the confirmation statement to the customer. 4. Review the last five transactions with the customer and flag any unauthorized activity. 5. Raise a dispute workflow for any unauthorized transactions found. 6. Disclose the replacement card fee (₹200 for Visa Classic, ₹500 for Visa Platinum) and expected delivery timeline (7-10 business days). 7. Inform the customer about temporary virtual card availability via the mobile app.",
+    "source": "Retail Cards SOP 4.2"
+  },
+  {
+    "id": "sop-cards-replacement",
+    "title": "Card Replacement Procedure",
+    "category": "Card Support",
+    "content": "1. Verify customer identity with PAN and registered mobile. 2. Check card type and associated account. 3. Generate replacement request in CBS. 4. Inform fee: ₹200 Classic, ₹500 Platinum. 5. Set expected delivery: 7-10 business days to registered address. 6. Provide virtual card access via mobile banking app. 7. Document the request ID and share with the customer.",
+    "source": "Retail Cards SOP 4.5"
+  },
+  {
+    "id": "sop-fd-premature",
+    "title": "Premature Fixed Deposit Withdrawal",
+    "category": "FD Services",
+    "content": "1. Verify FD account number and customer identity. 2. Inform that interest will be recalculated for the completed tenure at the applicable rate (which may be lower than the booked rate). 3. Disclose premature closure penalty: 1% reduction from applicable rate for deposits under ₹2 crore. 4. Calculate and share the net payout amount before taking consent. 5. Capture written consent or digital consent via OTP. 6. Process closure and credit proceeds to the linked savings account. 7. Provide closure receipt in customer's preferred language.",
+    "source": "Deposits SOP 2.7"
+  },
+  {
+    "id": "sop-kyc-update",
+    "title": "KYC Update Procedure",
+    "category": "KYC Update",
+    "content": "1. Verify existing customer identity with account number and registered mobile. 2. Collect updated documents: Aadhaar for address, PAN for identity. 3. Perform biometric verification if Aadhaar is used. 4. Update records in CBS — address, phone, email, nominee. 5. Generate and provide KYC update acknowledgement receipt. 6. Inform the customer that updated details will reflect within 24 hours. 7. If PAN is not linked, initiate PAN-Aadhaar linking via the bank portal.",
+    "source": "Compliance SOP 1.3"
+  },
+  {
+    "id": "sop-loan-enquiry",
+    "title": "Personal Loan Enquiry",
+    "category": "Loan Enquiry",
+    "content": "1. Capture customer income details, employment type, and loan amount required. 2. Check pre-approved loan eligibility in CBS. 3. Share applicable interest rates: salaried 10.49%-16%, self-employed 11.49%-18%. 4. Disclose processing fee (1-2% of loan amount). 5. Explain EMI structure and share an indicative EMI calculator output. 6. Inform about required documents: salary slips, ITR, bank statements, address proof. 7. Do NOT promise approval — say 'subject to credit assessment'. This is an RBI compliance requirement.",
+    "source": "Retail Loans SOP 3.1"
+  },
+  {
+    "id": "sop-account-opening",
+    "title": "New Savings Account Opening",
+    "category": "Account Opening",
+    "content": "1. Determine account type: Regular Savings, Salary, Student, or Senior Citizen. 2. Collect KYC documents: Aadhaar + PAN mandatory. 3. Perform in-person verification (IPV). 4. Complete account opening form in CBS. 5. Issue welcome kit: passbook, debit card request, net banking credentials. 6. Explain minimum balance requirement and applicable charges. 7. Offer mobile banking registration and UPI setup. 8. Provide account number and branch IFSC code in writing.",
+    "source": "Operations SOP 1.1"
+  },
+  {
+    "id": "sop-passbook-update",
+    "title": "Passbook Update / Statement Request",
+    "category": "Passbook Update",
+    "content": "1. Verify account holder identity with account number or debit card. 2. Update passbook using the passbook printer. 3. If entries exceed passbook capacity, issue a continuation passbook. 4. For digital statement: offer email statement or mobile app download. 5. For physical statement: print and hand over with bank seal. 6. Inform about auto-email statement subscription option.",
+    "source": "Operations SOP 1.4"
+  },
+  {
+    "id": "sop-fraud-dispute",
+    "title": "Transaction Dispute / Fraud Reporting",
+    "category": "Card Support",
+    "content": "1. Block the card immediately if fraud is suspected. 2. Record the disputed transaction details: date, amount, merchant. 3. File a fraud complaint in the CBS dispute module. 4. Generate a complaint reference number for the customer. 5. Inform customer about the 90-day investigation timeline (RBI circular). 6. Explain the liability protection: zero liability if reported within 3 days of transaction. 7. Schedule follow-up call within 7 business days.",
+    "source": "Retail Cards SOP 4.8"
+  },
+  {
+    "id": "sop-neft-rtgs",
+    "title": "NEFT / RTGS / IMPS Fund Transfer",
+    "category": "Fund Transfer",
+    "content": "1. Collect beneficiary name, account number, IFSC, and amount. 2. Verify details before initiating transfer. 3. NEFT settles within 2 hours in half-hourly batches. 4. RTGS is real-time, minimum INR 2 lakh, available 7 AM to 6 PM on weekdays. 5. IMPS is 24x7, limit typically INR 5 lakh. 6. Disclose applicable charges. 7. Provide UTR/reference number to the customer.",
+    "source": "Payment Operations SOP 5.1"
+  },
+  {
+    "id": "sop-cheque-services",
+    "title": "Cheque Book Issue and Stop Payment",
+    "category": "Cheque Services",
+    "content": "1. Verify account holder identity and status. 2. Issue cheque book (10/25 leaves). 3. First book per FY may be free. 4. Stop payment: collect cheque number, amount, payee, reason. 5. Disclose stop payment charges. 6. Cheque return charges: INR 150 to INR 750 depending on amount. 7. Inform about CIBIL impact of cheque bouncing.",
+    "source": "Operations SOP 2.3"
+  },
+  {
+    "id": "sop-locker-facility",
+    "title": "Safe Deposit Locker Allotment",
+    "category": "Locker Services",
+    "content": "1. Customer must hold active account with the branch. 2. KYC must be current. 3. Rent: small INR 1500-3000, medium INR 3000-6000, large INR 6000-12000 per annum. 4. Nomination is mandatory. 5. Bank must NOT insist on FD as precondition. 6. Maintain waiting list when unavailable.",
+    "source": "Locker Operations SOP 6.1"
+  },
+  {
+    "id": "sop-recurring-deposit",
+    "title": "Recurring Deposit Opening",
+    "category": "RD Services",
+    "content": "1. Collect monthly installment amount (minimum INR 100), tenure, linked account, nominee. 2. Interest rate same as FD for equivalent tenure. 3. Penalty for missed installments. 4. Premature closure after 3 months with recalculated interest. 5. Loan against RD up to 90% at RD rate plus 1-2%.",
+    "source": "Deposits SOP 2.9"
+  },
+  {
+    "id": "sop-insurance-guardrails",
+    "title": "Insurance Mis-selling Prevention",
+    "category": "Compliance",
+    "content": "1. Never guarantee returns on insurance or ULIP. 2. Never compare insurance with FD rates. 3. Always disclose free-look period. 4. Explain surrender charges and lock-in clearly. 5. Never bundle insurance with loans or accounts. 6. Provide IRDAI benefit illustration before purchase.",
+    "source": "Compliance SOP 1.8"
+  },
+  {
+    "id": "sop-account-closure",
+    "title": "Account Closure Procedure",
+    "category": "Account Closure",
+    "content": "1. Verify identity with PAN, Aadhaar, mobile OTP. 2. Ensure all cheques cleared. 3. Collect unused cheques and debit card. 4. Cancel all standing instructions. 5. Close linked subsidiary accounts first. 6. Transfer balance or issue DD. 7. Provide closure acknowledgement.",
+    "source": "Operations SOP 1.9"
+  }
+]

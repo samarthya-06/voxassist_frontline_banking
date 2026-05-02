@@ -1,0 +1,47 @@
+[
+  {
+    "id": "fees-retail-services-2026-04",
+    "title": "Retail Service Fees",
+    "category": "Fees",
+    "contentType": "fee_table",
+    "branchIds": ["default"],
+    "language": "en-IN",
+    "effectiveFrom": "2026-04-01",
+    "effectiveTo": null,
+    "version": "2026.04",
+    "approvedBy": "Branch Operations",
+    "source": "Schedule of Charges 2026/04",
+    "tags": ["fees", "charges", "card fee", "statement", "passbook", "account"],
+    "content": "Retail service fees effective 2026-04-01: Visa Classic card replacement INR 200; Visa Platinum card replacement INR 500; physical account statement at branch INR 100 per request after one free monthly statement; passbook continuation is free; duplicate passbook INR 150; savings account non-maintenance charge varies by account variant and must be checked in CBS before disclosure. Always disclose fees before consent and mention applicable taxes where shown in CBS."
+  },
+  {
+    "id": "documents-account-fd-kyc-2026-04",
+    "title": "Document Requirements for Account, FD, and KYC Services",
+    "category": "Documents",
+    "contentType": "checklist",
+    "branchIds": ["default"],
+    "language": "en-IN",
+    "effectiveFrom": "2026-04-01",
+    "effectiveTo": null,
+    "version": "2026.04",
+    "approvedBy": "Compliance Operations",
+    "source": "KYC and Documentation Checklist 2026/04",
+    "tags": ["documents", "kyc", "account opening", "fd", "aadhaar", "pan", "nominee"],
+    "content": "For account opening, collect PAN, Aadhaar or another officially valid document for identity and address, mobile number, email if available, nominee details, and photograph if scanner capture is not available. For fixed deposit booking by an existing customer, collect savings account number, deposit amount, tenure, payout instruction, nominee preference, PAN confirmation, and customer consent. For KYC update, collect PAN for identity, Aadhaar or officially valid address proof, registered mobile OTP, and biometric verification where Aadhaar is used. Never retain original documents unless a specific approved process requires it."
+  },
+  {
+    "id": "branch-policy-demo-central-2026-04",
+    "title": "Demo Branch Specific Counter Policy",
+    "category": "Branch Policy",
+    "contentType": "branch_policy",
+    "branchIds": ["demo-branch", "Demo Branch", "Central District"],
+    "language": "en-IN",
+    "effectiveFrom": "2026-04-01",
+    "effectiveTo": null,
+    "version": "2026.04",
+    "approvedBy": "Demo Branch Manager",
+    "source": "Demo Branch Circular 2026/04",
+    "tags": ["branch", "counter", "fd", "kyc", "queue", "policy"],
+    "content": "At Demo Branch and Central District counters, senior citizen customers may be routed to priority counter 2 for FD booking, KYC update, and passbook services. Physical statement requests after 3 PM are accepted but delivered the next business day. FD closures above INR 10 lakh require branch operations manager review before final submission in CBS. This branch policy supplements national SOPs and does not override regulatory requirements."
+  }
+]

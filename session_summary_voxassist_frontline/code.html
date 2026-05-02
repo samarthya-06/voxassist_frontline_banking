@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>VoxAssist Frontline - Session Summary</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-fixed": "#ffdbcd",
+                    "on-tertiary-container": "#d4815d",
+                    "on-primary-fixed-variant": "#24467c",
+                    "secondary-container": "#d0e1fb",
+                    "error-container": "#ffdad6",
+                    "inverse-on-surface": "#f1f0f5",
+                    "surface-container-high": "#e8e7ed",
+                    "on-background": "#1a1b1f",
+                    "surface-dim": "#dad9df",
+                    "surface-variant": "#e3e2e7",
+                    "on-primary-fixed": "#001b3f",
+                    "background": "#faf9fe",
+                    "primary": "#00193c",
+                    "on-secondary": "#ffffff",
+                    "surface-container-low": "#f4f3f8",
+                    "surface-container": "#eeedf2",
+                    "on-surface": "#1a1b1f",
+                    "secondary": "#505f76",
+                    "on-surface-variant": "#43474f",
+                    "on-error-container": "#93000a",
+                    "surface-tint": "#3e5e95",
+                    "tertiary-fixed-dim": "#ffb597",
+                    "tertiary-container": "#541d02",
+                    "surface-container-lowest": "#ffffff",
+                    "on-secondary-fixed-variant": "#38485d",
+                    "on-primary-container": "#7796d1",
+                    "inverse-surface": "#2f3034",
+                    "outline-variant": "#c4c6d1",
+                    "on-tertiary-fixed": "#360f00",
+                    "on-primary": "#ffffff",
+                    "on-tertiary": "#ffffff",
+                    "primary-fixed": "#d7e2ff",
+                    "surface-container-highest": "#e3e2e7",
+                    "secondary-fixed": "#d3e4fe",
+                    "secondary-fixed-dim": "#b7c8e1",
+                    "on-error": "#ffffff",
+                    "inverse-primary": "#abc7ff",
+                    "outline": "#747781",
+                    "surface-bright": "#faf9fe",
+                    "error": "#ba1a1a",
+                    "primary-container": "#002d62",
+                    "on-tertiary-fixed-variant": "#743417",
+                    "primary-fixed-dim": "#abc7ff",
+                    "on-secondary-fixed": "#0b1c30",
+                    "on-secondary-container": "#54647a",
+                    "tertiary": "#330e00",
+                    "surface": "#faf9fe"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "unit": "4px",
+                    "component-gap-sm": "8px",
+                    "container-padding": "24px",
+                    "gutter": "16px",
+                    "section-margin": "24px",
+                    "component-gap-xs": "4px",
+                    "component-gap-md": "12px"
+            },
+            "fontFamily": {
+                    "h2": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "tabular-nums": ["Inter"],
+                    "body-base": ["Inter"],
+                    "h3": ["Inter"],
+                    "h1": ["Inter"],
+                    "label-caps": ["Inter"]
+            },
+            "fontSize": {
+                    "h2": ["18px", {"lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "body-sm": ["13px", {"lineHeight": "18px", "letterSpacing": "0", "fontWeight": "400"}],
+                    "tabular-nums": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                    "body-base": ["14px", {"lineHeight": "20px", "letterSpacing": "0", "fontWeight": "400"}],
+                    "h3": ["16px", {"lineHeight": "20px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "h1": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                    "label-caps": ["11px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}]
+            }
+          }
+        }
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.fill {
+          font-variation-settings: 'FILL' 1;
+        }
+        /* Custom scrollbar for dense data views */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #e3e2e7; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #c4c6d1; 
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex font-sans overflow-hidden">
+<!-- SideNavBar (Background Context) -->
+<aside class="hidden md:flex flex-col h-full py-4 bg-slate-50 dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800 w-64 z-10 font-sans text-xs font-medium uppercase transition-all duration-150 ease-in-out shrink-0 relative">
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center shrink-0">
+<img alt="Manager Profile" class="w-full h-full object-cover rounded-full" data-alt="Professional headshot of a female branch manager in a well-lit office setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCE6UzBePtWIS2pmZw_PGVk56IQ1f_qxRCOfeZjdmYiAKLZEnINsn9XKfa0b16Al3_poQqH0v-KM-4-AkFApPYSIZ_Bj2rhsZpuiSi17rq88FfN1wDCBdDairhHAWHCDF2MMk8LhoaazsjAs-WvyKXRSfljieYhmXa6phC5VDztVw6aN1QTO4D52qJIGXCasq8PYe0qxuZa2hKMJCrL6kvIHHumYEwTa2MnkiP-pYjK5cU1HNuTrvWd9qjylgjbkqXj2uNDuoMmhpC5"/>
+</div>
+<div class="flex flex-col">
+<span class="text-blue-900 dark:text-blue-50 font-bold leading-tight tracking-tight">Branch Portal</span>
+<span class="text-[10px] text-slate-500 capitalize tracking-normal">Central District</span>
+</div>
+</div>
+<nav class="flex-1 flex flex-col gap-1 px-3">
+<!-- Active Nav Item -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-md bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-300 border-r-4 border-blue-900 dark:border-blue-400 group" href="#">
+<span class="material-symbols-outlined text-[18px]">mic</span>
+<span class="tracking-wider">Live Session</span>
+</a>
+<!-- Inactive Nav Items -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors group" href="#">
+<span class="material-symbols-outlined text-[18px]">history</span>
+<span class="tracking-wider">Records</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors group" href="#">
+<span class="material-symbols-outlined text-[18px]">gavel</span>
+<span class="tracking-wider">Compliance</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors group" href="#">
+<span class="material-symbols-outlined text-[18px]">monitoring</span>
+<span class="tracking-wider">Insights</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors group" href="#">
+<span class="material-symbols-outlined text-[18px]">group</span>
+<span class="tracking-wider">Team</span>
+</a>
+</nav>
+<div class="mt-auto px-3 flex flex-col gap-1 border-t border-slate-200 dark:border-slate-800 pt-4 mx-3">
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors group" href="#">
+<span class="material-symbols-outlined text-[18px]">support_agent</span>
+<span class="tracking-wider">Support</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors group" href="#">
+<span class="material-symbols-outlined text-[18px]">logout</span>
+<span class="tracking-wider">Logout</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col min-w-0 h-screen relative">
+<!-- TopNavBar (Background Context) -->
+<header class="flex justify-between items-center w-full px-6 h-14 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10 shrink-0 font-sans text-sm tracking-tight">
+<!-- Brand / Search Area -->
+<div class="flex items-center gap-6">
+<span class="text-lg font-black text-blue-900 dark:text-blue-50 tracking-tighter">VoxAssist Frontline</span>
+<div class="relative hidden lg:block w-64">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">search</span>
+<input class="w-full h-8 pl-9 pr-3 bg-slate-50 border border-slate-200 rounded-md text-xs focus:outline-none focus:border-blue-900 focus:ring-1 focus:ring-blue-900 transition-all text-slate-600" placeholder="Search records..." type="text"/>
+</div>
+</div>
+<!-- Navigation Links -->
+<nav class="hidden md:flex items-center h-full gap-1 ml-8">
+<a class="flex items-center h-full px-4 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors" href="#">Dashboard</a>
+<a class="flex items-center h-full px-4 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors" href="#">Analytics</a>
+<a class="flex items-center h-full px-4 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors" href="#">History</a>
+</nav>
+<div class="flex-1"></div>
+<!-- Trailing Icons & Profile -->
+<div class="flex items-center gap-2">
+<button class="w-8 h-8 flex items-center justify-center rounded-full text-blue-900 dark:text-blue-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-full text-blue-900 dark:text-blue-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-full text-blue-900 dark:text-blue-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+<span class="material-symbols-outlined text-[20px]">help</span>
+</button>
+<div class="w-8 h-8 ml-2 rounded-full border border-slate-200 overflow-hidden cursor-pointer">
+<img alt="Staff Avatar" class="w-full h-full object-cover" data-alt="Close up portrait of a male banking professional with short hair" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDmeIKeGZxGhM0HQivlNDxBvzMlo7PCUZ7qRjehoi-kxeucPSTv3rwPG3_xY4-Er3gqdH8jbFYRZ2Nunkw8Q9Xd1viGLyP-2U2SRyTpImUZf8o6PEDcOrI7mj64GHVaFJHIMYOl27s9a2zJvwvS0O6HnAyTdXg5XRxeJ45FMHWQnvMp9nEDnT5MC8Bd7ijK9nGNkGjtvRZXoMT_4O4T77EV4dfs20DCCzIuUPA9qgs1mFxS_Ie3gu0BbTvLR6Tg-rmr4gX47ZGXYr5l"/>
+</div>
+</div>
+</header>
+<!-- Blurred Background Canvas (Simulating Dashboard View 2) -->
+<div class="flex-1 p-container-padding overflow-y-auto bg-surface-container-low/50">
+<!-- Simulated Bento Grid Dashboard Content behind the modal -->
+<div class="max-w-7xl mx-auto grid grid-cols-12 gap-gutter opacity-40 pointer-events-none filter blur-[2px]">
+<!-- Header Stats -->
+<div class="col-span-12 grid grid-cols-4 gap-gutter mb-4">
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-4 h-24"></div>
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-4 h-24"></div>
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-4 h-24"></div>
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-4 h-24"></div>
+</div>
+<!-- Main Chart Area -->
+<div class="col-span-8 bg-surface-container-lowest border border-outline-variant rounded-lg p-6 min-h-[400px]"></div>
+<!-- Side List -->
+<div class="col-span-4 bg-surface-container-lowest border border-outline-variant rounded-lg p-6 min-h-[400px]"></div>
+</div>
+</div>
+<!-- MODAL OVERLAY: Session Summary & Record -->
+<div class="absolute inset-0 z-50 flex items-center justify-center bg-inverse-surface/30 backdrop-blur-[1px] p-4 sm:p-6">
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl w-full max-w-[720px] shadow-[0_8px_30px_rgb(0,0,0,0.08)] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+<!-- Modal Header -->
+<div class="px-container-padding py-5 border-b border-surface-variant flex justify-between items-center bg-surface-container-lowest">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</div>
+<h2 class="font-h2 text-h2 text-on-surface">Session Complete</h2>
+</div>
+<button class="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors focus:outline-none focus:ring-2 focus:ring-primary">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<!-- Modal Tabs -->
+<div class="px-container-padding border-b border-surface-variant flex gap-6 bg-surface-bright pt-2">
+<button class="pb-3 border-b-2 border-primary text-primary font-h3 text-h3 transition-colors">
+                        English
+                    </button>
+<button class="pb-3 border-b-2 border-transparent text-on-surface-variant hover:text-on-surface font-h3 text-h3 transition-colors">
+                        Marathi
+                    </button>
+</div>
+<!-- Modal Body -->
+<div class="p-container-padding flex flex-col gap-section-margin overflow-y-auto max-h-[614px] bg-surface-bright">
+<!-- Customer Context (Added for realism in banking) -->
+<div class="flex items-center gap-4 p-4 rounded-lg bg-surface-container-low border border-surface-variant">
+<div class="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center text-on-surface-variant font-h3 text-h3">
+                            AJ
+                        </div>
+<div class="flex-1">
+<div class="font-h3 text-h3 text-on-surface">Arjun Jha</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Acct: •••• 4921 | Authenticated via Voice Biometrics</div>
+</div>
+<div class="text-right">
+<div class="font-label-caps text-label-caps text-on-surface-variant uppercase">Duration</div>
+<div class="font-tabular-nums text-tabular-nums text-on-surface">04:22</div>
+</div>
+</div>
+<!-- Summary Section -->
+<section>
+<h3 class="font-h3 text-h3 text-on-surface mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-secondary">notes</span>
+                            Conversation Summary
+                        </h3>
+<div class="bg-surface border border-outline-variant rounded-lg p-4 font-body-base text-body-base text-on-surface-variant leading-relaxed">
+<ul class="space-y-2 list-none">
+<li class="flex items-start gap-2">
+<span class="material-symbols-outlined text-[16px] text-outline mt-0.5 shrink-0">arrow_right</span>
+<span>Customer reported a lost debit card terminating in 4921 while traveling in Pune.</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="material-symbols-outlined text-[16px] text-outline mt-0.5 shrink-0">arrow_right</span>
+<span>Successfully verified identity via standard security questions (DOB, recent transaction).</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="material-symbols-outlined text-[16px] text-outline mt-0.5 shrink-0">arrow_right</span>
+<span>Blocked compromised card immediately to prevent unauthorized transactions.</span>
+</li>
+<li class="flex items-start gap-2">
+<span class="material-symbols-outlined text-[16px] text-outline mt-0.5 shrink-0">arrow_right</span>
+<span>Customer requested a replacement card to be sent to their registered home address in Mumbai.</span>
+</li>
+</ul>
+</div>
+</section>
+<!-- Action Checklist Section -->
+<section>
+<h3 class="font-h3 text-h3 text-on-surface mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-secondary">task_alt</span>
+                            Action Checklist
+                        </h3>
+<div class="bg-surface border border-outline-variant rounded-lg divide-y divide-surface-variant">
+<!-- Checkbox Item 1 -->
+<label class="flex items-start gap-3 p-4 cursor-pointer hover:bg-surface-container-low transition-colors group">
+<div class="relative flex items-center pt-0.5">
+<input checked="" class="peer h-4 w-4 rounded border-outline-variant text-primary focus:ring-primary focus:ring-offset-0 bg-surface-container-lowest transition-all" type="checkbox"/>
+</div>
+<div class="flex-1">
+<div class="font-tabular-nums text-tabular-nums text-on-surface group-hover:text-primary transition-colors">Dispatch new debit card</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Standard delivery (3-5 business days) to registered address.</div>
+</div>
+<span class="material-symbols-outlined text-primary text-[20px]">check</span>
+</label>
+<!-- Checkbox Item 2 -->
+<label class="flex items-start gap-3 p-4 cursor-pointer hover:bg-surface-container-low transition-colors group">
+<div class="relative flex items-center pt-0.5">
+<input class="peer h-4 w-4 rounded border-outline-variant text-primary focus:ring-primary focus:ring-offset-0 bg-surface-container-lowest transition-all" type="checkbox"/>
+</div>
+<div class="flex-1">
+<div class="font-tabular-nums text-tabular-nums text-on-surface group-hover:text-primary transition-colors">Update KYC</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Customer mentioned a recent change in employment status. Flagged for review.</div>
+</div>
+</label>
+</div>
+</section>
+</div>
+<!-- Modal Footer -->
+<div class="px-container-padding py-4 border-t border-surface-variant bg-surface-container-lowest flex flex-wrap items-center justify-between gap-4">
+<div class="flex items-center gap-2">
+<button class="h-[32px] px-4 inline-flex items-center justify-center gap-2 border border-outline-variant rounded text-on-surface-variant font-tabular-nums text-tabular-nums hover:bg-surface-container hover:text-on-surface transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1">
+<span class="material-symbols-outlined text-[16px]">print</span>
+                            Print Receipt
+                        </button>
+</div>
+<div class="flex items-center gap-3">
+<button class="h-[32px] px-4 inline-flex items-center justify-center gap-2 border border-outline-variant rounded text-on-surface-variant font-tabular-nums text-tabular-nums hover:bg-surface-container hover:text-on-surface transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1">
+<span class="material-symbols-outlined text-[16px]">sms</span>
+                            SMS to Customer
+                        </button>
+<button class="h-[32px] px-5 inline-flex items-center justify-center gap-2 bg-primary text-on-primary rounded font-tabular-nums text-tabular-nums hover:bg-primary-container hover:text-on-primary-container transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1 shadow-sm">
+                            Save &amp; Next Customer
+                            <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

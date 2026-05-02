@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>VoxAssist - Interaction Platform</title>
+    
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed": "#ffdbcd",
+                        "on-tertiary-container": "#d4815d",
+                        "on-primary-fixed-variant": "#24467c",
+                        "secondary-container": "#d0e1fb",
+                        "error-container": "#ffdad6",
+                        "inverse-on-surface": "#f1f0f5",
+                        "surface-container-high": "#e8e7ed",
+                        "on-background": "#1a1b1f",
+                        "surface-dim": "#dad9df",
+                        "surface-variant": "#e3e2e7",
+                        "on-primary-fixed": "#001b3f",
+                        "background": "#faf9fe",
+                        "primary": "#00193c",
+                        "on-secondary": "#ffffff",
+                        "surface-container-low": "#f4f3f8",
+                        "surface-container": "#eeedf2",
+                        "on-surface": "#1a1b1f",
+                        "secondary": "#505f76",
+                        "on-surface-variant": "#43474f",
+                        "on-error-container": "#93000a",
+                        "surface-tint": "#3e5e95",
+                        "tertiary-fixed-dim": "#ffb597",
+                        "tertiary-container": "#541d02",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-fixed-variant": "#38485d",
+                        "on-primary-container": "#7796d1",
+                        "inverse-surface": "#2f3034",
+                        "outline-variant": "#c4c6d1",
+                        "on-tertiary-fixed": "#360f00",
+                        "on-primary": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "primary-fixed": "#d7e2ff",
+                        "surface-container-highest": "#e3e2e7",
+                        "secondary-fixed": "#d3e4fe",
+                        "secondary-fixed-dim": "#b7c8e1",
+                        "on-error": "#ffffff",
+                        "inverse-primary": "#abc7ff",
+                        "outline": "#747781",
+                        "surface-bright": "#faf9fe",
+                        "error": "#ba1a1a",
+                        "primary-container": "#002d62",
+                        "on-tertiary-fixed-variant": "#743417",
+                        "primary-fixed-dim": "#abc7ff",
+                        "on-secondary-fixed": "#0b1c30",
+                        "on-secondary-container": "#54647a",
+                        "tertiary": "#330e00",
+                        "surface": "#faf9fe"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "unit": "4px",
+                        "component-gap-sm": "8px",
+                        "container-padding": "24px",
+                        "gutter": "16px",
+                        "section-margin": "24px",
+                        "component-gap-xs": "4px",
+                        "component-gap-md": "12px"
+                    },
+                    "fontFamily": {
+                        "h2": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "tabular-nums": ["Inter"],
+                        "body-base": ["Inter"],
+                        "h3": ["Inter"],
+                        "h1": ["Inter"],
+                        "label-caps": ["Inter"]
+                    },
+                    "fontSize": {
+                        "h2": ["18px", {"lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-sm": ["13px", {"lineHeight": "18px", "letterSpacing": "0", "fontWeight": "400"}],
+                        "tabular-nums": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                        "body-base": ["14px", {"lineHeight": "20px", "letterSpacing": "0", "fontWeight": "400"}],
+                        "h3": ["16px", {"lineHeight": "20px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "h1": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                        "label-caps": ["11px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}]
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.fill {
+            font-variation-settings: 'FILL' 1;
+        }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #e3e2e7; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #c4c6d1; }
+    </style>
+
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/history@5/umd/history.development.js"></script>
+    <script src="https://unpkg.com/react-router@6.3.0/umd/react-router.development.js"></script>
+    <script src="https://unpkg.com/react-router-dom@6.3.0/umd/react-router-dom.development.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+</head>
+<body class="bg-background text-on-background min-h-screen font-sans antialiased">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { createRoot } = ReactDOM;
+        const { MemoryRouter, Routes, Route, Link, useNavigate } = ReactRouterDOM;
+
+        // --- Screens ---
+
+        function LoginScreen() {
+            const navigate = useNavigate();
+            const [role, setRole] = useState('frontline');
+
+            const handleLogin = () => {
+                if (role === 'frontline') {
+                    navigate('/dashboard');
+                } else {
+                    navigate('/analytics');
+                }
+            };
+
+            return (
+                <div class="bg-surface-container-low min-h-screen flex items-center justify-center text-on-surface antialiased">
+                    <main class="w-full max-w-[420px] px-gutter">
+                        <div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-container-padding shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)]">
+                            <div class="flex flex-col items-center mb-section-margin text-center">
+                                <div class="w-12 h-12 bg-primary rounded flex items-center justify-center mb-component-gap-md">
+                                    <span class="material-symbols-outlined text-on-primary" style={{fontVariationSettings: "'FILL' 1"}}>account_balance</span>
+                                </div>
+                                <h1 class="font-h1 text-h1 text-on-surface mb-unit">Institutional Access</h1>
+                                <p class="font-body-sm text-body-sm text-on-surface-variant">Authentication Gateway</p>
+                            </div>
+                            <div class="flex bg-surface-container p-[2px] rounded border border-outline-variant mb-section-margin">
+                                <button 
+                                    className={`flex-1 py-component-gap-sm px-component-gap-md font-body-sm text-body-sm flex justify-center items-center transition-all ${role === 'frontline' ? 'bg-surface-container-lowest text-on-surface border border-outline-variant rounded shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}`}
+                                    onClick={() => setRole('frontline')}
+                                    type="button">
+                                    Frontline Staff
+                                </button>
+                                <button 
+                                    className={`flex-1 py-component-gap-sm px-component-gap-md font-body-sm text-body-sm flex justify-center items-center transition-all ${role === 'manager' ? 'bg-surface-container-lowest text-on-surface border border-outline-variant rounded shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}`}
+                                    onClick={() => setRole('manager')}
+                                    type="button">
+                                    Branch Manager
+                                </button>
+                            </div>
+                            <form class="space-y-component-gap-md" onSubmit={(e) => { e.preventDefault(); handleLogin(); }}>
+                                <div>
+                                    <label class="block font-body-sm text-body-sm text-on-surface mb-[4px]" htmlFor="employee-id">Employee ID</label>
+                                    <input autocomplete="username" class="w-full h-8 px-component-gap-sm border border-outline-variant rounded bg-surface-container-lowest text-on-surface font-body-sm text-body-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary placeholder:text-outline-variant" id="employee-id" placeholder="e.g. 104859" type="text" />
+                                </div>
+                                <div>
+                                    <div class="flex justify-between items-center mb-[4px]">
+                                        <label class="block font-body-sm text-body-sm text-on-surface" htmlFor="password">Password</label>
+                                        <a class="font-body-sm text-body-sm text-primary hover:underline focus:outline-none" href="#">Forgot?</a>
+                                    </div>
+                                    <input autocomplete="current-password" class="w-full h-8 px-component-gap-sm border border-outline-variant rounded bg-surface-container-lowest text-on-surface font-body-sm text-body-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary placeholder:text-outline-variant" id="password" placeholder="••••••••" type="password" />
+                                </div>
+                                <div class="pt-component-gap-sm mt-section-margin">
+                                    <button class="w-full h-8 bg-primary-container text-on-primary rounded font-body-base text-body-base flex items-center justify-center hover:bg-primary transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary" type="submit">
+                                        <span class="material-symbols-outlined mr-2 text-[18px]">lock</span>
+                                        Secure Login
+                                    </button>
+                                </div>
+                            </form>
+                            <div class="mt-section-margin text-center">
+                                <p class="font-body-sm text-body-sm text-outline flex items-center justify-center gap-1">
+                                    <span class="material-symbols-outlined text-[14px]">verified_user</span>
+                                    End-to-end encrypted session
+                                </p>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        }
+
+        function FrontlineDashboard() {
+            const navigate = useNavigate();
+            return (
+                <div class="h-screen w-screen overflow-hidden flex flex-col">
+                    <header class="bg-white dark:bg-slate-950 font-sans text-sm tracking-tight w-full top-0 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center px-6 h-14 flex-shrink-0 z-10">
+                        <div class="flex items-center gap-6">
+                            <span class="text-lg font-black text-blue-900 dark:text-blue-50">VoxAssist Frontline</span>
+                        </div>
+                        <div class="flex items-center gap-4">
+                             <Link to="/summary" className="text-primary hover:underline text-sm font-medium mr-4">View Session Summary</Link>
+                            <button onClick={() => navigate('/')} class="text-slate-500 hover:bg-slate-50 p-1 rounded">
+                                <span class="material-symbols-outlined">logout</span>
+                            </button>
+                        </div>
+                    </header>
+                    <div class="flex flex-1 overflow-hidden">
+                        <nav class="bg-slate-50 w-64 flex flex-col py-4 flex-shrink-0 border-r border-slate-200">
+                             <div class="px-6 mb-8 flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full bg-surface-variant border border-outline-variant overflow-hidden"></div>
+                                <div>
+                                    <div class="text-blue-900 font-bold text-sm">Branch Portal</div>
+                                    <div class="text-[10px] text-slate-500">Central District</div>
+                                </div>
+                            </div>
+                            <div class="flex-1 flex flex-col gap-1">
+                                <a class="bg-blue-50 text-blue-900 border-r-4 border-blue-900 flex items-center gap-3 px-6 py-3" href="#">
+                                    <span class="material-symbols-outlined" style={{fontSize: '18px'}}>mic</span>
+                                    Live Session
+                                </a>
+                            </div>
+                        </nav>
+                        <main class="flex-1 flex gap-component-gap-sm p-component-gap-sm bg-surface-container-low overflow-hidden pb-20">
+                            <section class="flex-1 min-w-0 bg-surface border border-outline-variant rounded-DEFAULT flex flex-col">
+                                <header class="px-gutter py-component-gap-md border-b border-outline-variant bg-surface-bright flex justify-between items-center rounded-t-DEFAULT">
+                                    <h2 class="font-h3 text-h3 text-on-surface">Live Transcript</h2>
+                                    <span class="material-symbols-outlined text-outline" style={{fontSize: '18px'}}>format_quote</span>
+                                </header>
+                                <div class="flex-1 overflow-y-auto p-gutter flex flex-col gap-component-gap-md bg-surface-bright">
+                                    <div class="flex flex-col gap-1 max-w-[85%] self-start">
+                                        <span class="font-label-caps text-label-caps text-outline ml-1">Customer (Marathi)</span>
+                                        <div class="bg-surface-variant text-on-surface-variant font-body-sm text-body-sm p-component-gap-md rounded-lg rounded-tl-none border border-outline-variant/50">
+                                            माझे क्रेडिट कार्ड हरवले आहे आणि मला ते ब्लॉक करायचे आहे.
+                                        </div>
+                                    </div>
+                                    <div class="flex flex-col gap-1 max-w-[85%] self-start ml-4 border-l-2 border-primary-container pl-3">
+                                        <span class="font-label-caps text-label-caps text-primary-container">Auto-Translation</span>
+                                        <div class="text-on-surface font-body-sm text-body-sm italic">
+                                            "I have lost my credit card and I want to block it."
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+                            <section class="flex-[1.2] min-w-0 bg-surface border border-outline-variant rounded-DEFAULT flex flex-col">
+                                <header class="px-gutter py-component-gap-md border-b border-outline-variant bg-surface-bright flex justify-between items-center rounded-t-DEFAULT">
+                                    <h2 class="font-h3 text-h3 text-on-surface">Agentic Workspace</h2>
+                                    <span class="material-symbols-outlined text-outline" style={{fontSize: '18px'}}>smart_toy</span>
+                                </header>
+                                 <div class="flex-1 p-gutter bg-surface-bright">
+                                    <div class="flex flex-col gap-component-gap-sm mb-4">
+                                        <span class="font-label-caps text-label-caps text-on-surface-variant">Suggested Actions</span>
+                                        <div class="flex gap-component-gap-sm">
+                                            <button class="flex-1 bg-primary text-on-primary px-component-gap-md py-2 rounded-DEFAULT flex items-center justify-center gap-2 hover:bg-primary-container">
+                                                <span class="material-symbols-outlined" style={{fontSize: '16px'}}>block</span>
+                                                Initiate Card Block
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+                            <section class="flex-1 min-w-0 bg-surface border border-outline-variant rounded-DEFAULT flex flex-col">
+                                <header class="px-gutter py-component-gap-md border-b border-outline-variant bg-surface-bright flex justify-between items-center rounded-t-DEFAULT">
+                                    <h2 class="font-h3 text-h3 text-on-surface">SOPs & Guardrails</h2>
+                                </header>
+                                <div class="p-gutter bg-surface-bright">
+                                     <div class="bg-error-container text-on-error-container p-component-gap-md rounded-DEFAULT flex gap-3 items-start border border-error/20 mb-4">
+                                        <span class="material-symbols-outlined text-error mt-0.5" style={{fontSize: '18px', fontVariationSettings: "'FILL' 1"}}>warning</span>
+                                        <div class="flex flex-col gap-1">
+                                            <span class="font-tabular-nums text-tabular-nums font-bold">Non-compliant statement detected</span>
+                                            <span class="font-body-sm text-body-sm opacity-90">Follow Script B.</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+                        </main>
+                    </div>
+                </div>
+            );
+        }
+
+        function SessionSummary() {
+             const navigate = useNavigate();
+             return (
+                 <div class="bg-surface-container-low min-h-screen flex items-center justify-center p-4">
+                     <div class="bg-surface-container-lowest border border-outline-variant rounded-xl w-full max-w-[720px] shadow-lg flex flex-col">
+                         <div class="px-container-padding py-5 border-b border-surface-variant flex justify-between items-center bg-surface-container-lowest">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center">
+                                    <span class="material-symbols-outlined text-[18px]">check_circle</span>
+                                </div>
+                                <h2 class="font-h2 text-h2 text-on-surface">Session Complete</h2>
+                            </div>
+                            <button onClick={() => navigate('/dashboard')} class="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container">
+                                <span class="material-symbols-outlined text-[20px]">close</span>
+                            </button>
+                        </div>
+                        <div class="p-container-padding flex flex-col gap-section-margin">
+                            <section>
+                                <h3 class="font-h3 text-h3 text-on-surface mb-3 flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-[18px] text-secondary">notes</span>
+                                    Conversation Summary
+                                </h3>
+                                <div class="bg-surface border border-outline-variant rounded-lg p-4 font-body-base text-body-base text-on-surface-variant">
+                                    <ul class="space-y-2 list-none">
+                                        <li class="flex items-start gap-2">
+                                            <span class="material-symbols-outlined text-[16px] text-outline mt-0.5">arrow_right</span>
+                                            <span>Customer reported a lost debit card terminating in 4921 while traveling in Pune.</span>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </section>
+                        </div>
+                        <div class="px-container-padding py-4 border-t border-surface-variant flex justify-end gap-3">
+                            <button onClick={() => navigate('/dashboard')} class="px-5 py-2 bg-primary text-on-primary rounded font-tabular-nums text-tabular-nums hover:bg-primary-container flex items-center gap-2">
+                                Save & Next Customer
+                                <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+                            </button>
+                        </div>
+                     </div>
+                 </div>
+             )
+        }
+
+        function ManagerAnalytics() {
+            const navigate = useNavigate();
+            return (
+                <div class="flex h-screen w-full bg-background overflow-hidden">
+                    <aside class="bg-slate-50 w-64 border-r border-slate-200 flex flex-col py-4 shrink-0">
+                        <div class="px-6 mb-8 flex items-center gap-4">
+                            <div>
+                                <h2 class="text-blue-900 font-bold font-h3 text-h3">Branch Portal</h2>
+                                <p class="font-body-sm text-body-sm text-slate-500">Central District</p>
+                            </div>
+                        </div>
+                        <nav class="flex-1 px-3 space-y-1">
+                             <a class="flex items-center gap-3 px-3 py-2.5 rounded-DEFAULT bg-blue-50 text-blue-900 border-r-4 border-blue-900" href="#">
+                                <span class="material-symbols-outlined text-[20px]" style={{fontVariationSettings: "'FILL' 1"}}>monitoring</span>
+                                <span class="font-sans text-xs font-medium uppercase">Insights</span>
+                            </a>
+                        </nav>
+                        <div class="px-3 mt-auto space-y-1">
+                            <button onClick={() => navigate('/')} class="flex items-center gap-3 px-3 py-2.5 rounded-DEFAULT text-slate-600 w-full hover:bg-slate-100">
+                                <span class="material-symbols-outlined text-[20px]">logout</span>
+                                <span class="font-sans text-xs font-medium uppercase">Logout</span>
+                            </button>
+                        </div>
+                    </aside>
+                    <main class="flex-1 overflow-y-auto bg-surface flex flex-col p-container-padding gap-section-margin">
+                        <header class="flex justify-between items-end pb-4 border-b border-outline-variant">
+                            <div>
+                                <h1 class="font-h1 text-h1 text-on-surface">Analytics Dashboard</h1>
+                                <p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Real-time metrics for Central District.</p>
+                            </div>
+                        </header>
+                         <section class="grid grid-cols-1 md:grid-cols-3 gap-gutter">
+                            <div class="bg-on-secondary border border-outline-variant rounded-lg p-4">
+                                <span class="font-body-sm text-on-surface-variant">Active Desks</span>
+                                <div class="mt-2 text-h1 text-on-surface tracking-tight">4 / 5</div>
+                            </div>
+                        </section>
+                    </main>
+                </div>
+            );
+        }
+
+        function App() {
+            return (
+                <MemoryRouter>
+                    <Routes>
+                        <Route path="/" element={<LoginScreen />} />
+                        <Route path="/dashboard" element={<FrontlineDashboard />} />
+                        <Route path="/summary" element={<SessionSummary />} />
+                        <Route path="/analytics" element={<ManagerAnalytics />} />
+                    </Routes>
+                </MemoryRouter>
+            );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

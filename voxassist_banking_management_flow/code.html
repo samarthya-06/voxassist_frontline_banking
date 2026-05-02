@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Authentication - VoxAssist</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed": "#ffdbcd",
+                        "on-tertiary-container": "#d4815d",
+                        "on-primary-fixed-variant": "#24467c",
+                        "secondary-container": "#d0e1fb",
+                        "error-container": "#ffdad6",
+                        "inverse-on-surface": "#f1f0f5",
+                        "surface-container-high": "#e8e7ed",
+                        "on-background": "#1a1b1f",
+                        "surface-dim": "#dad9df",
+                        "surface-variant": "#e3e2e7",
+                        "on-primary-fixed": "#001b3f",
+                        "background": "#faf9fe",
+                        "primary": "#00193c",
+                        "on-secondary": "#ffffff",
+                        "surface-container-low": "#f4f3f8",
+                        "surface-container": "#eeedf2",
+                        "on-surface": "#1a1b1f",
+                        "secondary": "#505f76",
+                        "on-surface-variant": "#43474f",
+                        "on-error-container": "#93000a",
+                        "surface-tint": "#3e5e95",
+                        "tertiary-fixed-dim": "#ffb597",
+                        "tertiary-container": "#541d02",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-fixed-variant": "#38485d",
+                        "on-primary-container": "#7796d1",
+                        "inverse-surface": "#2f3034",
+                        "outline-variant": "#c4c6d1",
+                        "on-tertiary-fixed": "#360f00",
+                        "on-primary": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "primary-fixed": "#d7e2ff",
+                        "surface-container-highest": "#e3e2e7",
+                        "secondary-fixed": "#d3e4fe",
+                        "secondary-fixed-dim": "#b7c8e1",
+                        "on-error": "#ffffff",
+                        "inverse-primary": "#abc7ff",
+                        "outline": "#747781",
+                        "surface-bright": "#faf9fe",
+                        "error": "#ba1a1a",
+                        "primary-container": "#002d62",
+                        "on-tertiary-fixed-variant": "#743417",
+                        "primary-fixed-dim": "#abc7ff",
+                        "on-secondary-fixed": "#0b1c30",
+                        "on-secondary-container": "#54647a",
+                        "tertiary": "#330e00",
+                        "surface": "#faf9fe"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "unit": "4px",
+                        "component-gap-sm": "8px",
+                        "container-padding": "24px",
+                        "gutter": "16px",
+                        "section-margin": "24px",
+                        "component-gap-xs": "4px",
+                        "component-gap-md": "12px"
+                    },
+                    "fontFamily": {
+                        "h2": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "tabular-nums": ["Inter"],
+                        "body-base": ["Inter"],
+                        "h3": ["Inter"],
+                        "h1": ["Inter"],
+                        "label-caps": ["Inter"]
+                    },
+                    "fontSize": {
+                        "h2": ["18px", {"lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-sm": ["13px", {"lineHeight": "18px", "letterSpacing": "0", "fontWeight": "400"}],
+                        "tabular-nums": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                        "body-base": ["14px", {"lineHeight": "20px", "letterSpacing": "0", "fontWeight": "400"}],
+                        "h3": ["16px", {"lineHeight": "20px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "h1": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                        "label-caps": ["11px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-surface-container-low min-h-screen flex items-center justify-center text-on-surface antialiased">
+<!-- Main Content Canvas (No Navigation Shells for Transactional Screen) -->
+<main class="w-full max-w-[420px] px-gutter">
+<!-- Login Card -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-container-padding shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)]">
+<!-- Header & Logo -->
+<div class="flex flex-col items-center mb-section-margin text-center">
+<div class="w-12 h-12 bg-primary rounded flex items-center justify-center mb-component-gap-md">
+<span class="material-symbols-outlined text-on-primary" style="font-variation-settings: 'FILL' 1;">account_balance</span>
+</div>
+<h1 class="font-h1 text-h1 text-on-surface mb-unit">Institutional Access</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Authentication Gateway</p>
+</div>
+<!-- Role Selection Tabs -->
+<div class="flex bg-surface-container p-[2px] rounded border border-outline-variant mb-section-margin">
+<!-- Active Tab -->
+<button class="flex-1 py-component-gap-sm px-component-gap-md bg-surface-container-lowest text-on-surface border border-outline-variant rounded shadow-sm font-body-sm text-body-sm flex justify-center items-center transition-all" type="button">
+                    Frontline Staff
+                </button>
+<!-- Inactive Tab -->
+<button class="flex-1 py-component-gap-sm px-component-gap-md text-on-surface-variant font-body-sm text-body-sm flex justify-center items-center hover:text-on-surface transition-colors" type="button">
+                    Branch Manager
+                </button>
+</div>
+<!-- Authentication Form -->
+<form class="space-y-component-gap-md">
+<!-- Employee ID Input -->
+<div>
+<label class="block font-body-sm text-body-sm text-on-surface mb-[4px]" for="employee-id">Employee ID</label>
+<input autocomplete="username" class="w-full h-8 px-component-gap-sm border border-outline-variant rounded bg-surface-container-lowest text-on-surface font-body-sm text-body-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary placeholder:text-outline-variant" id="employee-id" placeholder="e.g. 104859" type="text"/>
+</div>
+<!-- Password Input -->
+<div>
+<div class="flex justify-between items-center mb-[4px]">
+<label class="block font-body-sm text-body-sm text-on-surface" for="password">Password</label>
+<a class="font-body-sm text-body-sm text-primary hover:underline focus:outline-none" href="#">Forgot?</a>
+</div>
+<input autocomplete="current-password" class="w-full h-8 px-component-gap-sm border border-outline-variant rounded bg-surface-container-lowest text-on-surface font-body-sm text-body-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary placeholder:text-outline-variant" id="password" placeholder="••••••••" type="password"/>
+</div>
+<!-- Action Area -->
+<div class="pt-component-gap-sm mt-section-margin">
+<button class="w-full h-8 bg-primary-container text-on-primary rounded font-body-base text-body-base flex items-center justify-center hover:bg-primary transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary" type="button">
+<span class="material-symbols-outlined mr-2 text-[18px]">lock</span>
+                        Secure Login
+                    </button>
+</div>
+</form>
+<!-- Footer Context -->
+<div class="mt-section-margin text-center">
+<p class="font-body-sm text-body-sm text-outline flex items-center justify-center gap-1">
+<span class="material-symbols-outlined text-[14px]">verified_user</span>
+                    End-to-end encrypted session
+                </p>
+</div>
+</div>
+</main>
+</body></html>
