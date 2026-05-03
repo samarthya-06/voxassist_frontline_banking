@@ -199,7 +199,7 @@ export function LiveSession({ authToken, sessionId, onEndSession }: LiveSessionP
               <h2 className="text-[16px] font-semibold leading-5 text-on-surface">Live Transcript</h2>
               <div className="flex items-center gap-2">
                 <a
-                  href={`/kiosk?session=${encodeURIComponent(sessionId)}&token=demo`}
+                  href={`/kiosk?session=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(authToken)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="rounded border border-outline-variant bg-white px-2 py-1 text-[11px] font-semibold text-primary hover:bg-surface-container-low"
