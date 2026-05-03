@@ -204,11 +204,13 @@ Create an S3 bucket for the static frontend. If using the simple S3 website host
 aws s3 mb s3://voxassist-app-YOUR_NAME --region YOUR_REGION
 aws s3 website s3://voxassist-app-YOUR_NAME --index-document index.html --error-document index.html
 aws s3api put-public-access-block --bucket voxassist-app-YOUR_NAME --public-access-block-configuration "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false"
-aws s3api put-bucket-policy --bucket voxassist-app-YOUR_NAME --policy file://bucket-policy.json
+cp deploy/aws/bucket-policy.template.json /tmp/voxassist-bucket-policy.json
+sed -i.bak 's/REPLACE_WITH_BUCKET_NAME/voxassist-app-YOUR_NAME/g' /tmp/voxassist-bucket-policy.json
+aws s3api put-bucket-policy --bucket voxassist-app-YOUR_NAME --policy file:///tmp/voxassist-bucket-policy.json
 aws s3 sync frontend/dist/ s3://voxassist-app-YOUR_NAME/ --delete
 ```
 
-`bucket-policy.json`:
+`deploy/aws/bucket-policy.template.json`:
 
 ```json
 {

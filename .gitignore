@@ -4,5 +4,14 @@ frontend/dist/
 .chroma/
 __pycache__/
 *.pyc
-.env
-backend/.env
+.env*
+!*.example.env
+backend/.env*
+!backend/*.example.env
+frontend/.env*
+!frontend/*.example.env
+deploy/aws/.env*
+!deploy/aws/*.example.env
+scratch/
+.vscode/
+.DS_Store
