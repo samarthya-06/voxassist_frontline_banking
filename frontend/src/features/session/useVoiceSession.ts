@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from "react";
-import { useAppDispatch, useAppSelector } from "../../hooks";
+import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import {
   addTranscript,
   cancelFormInterview,

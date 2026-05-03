@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { AppShell } from "./components/layout/AppShell";
-import { LoginPage } from "./features/auth/LoginPage";
-import { AnalyticsDashboard } from "./features/analytics/AnalyticsDashboard";
-import { LiveSession } from "./features/session/LiveSession";
-import { SessionSummary } from "./features/session/SessionSummary";
-import { SessionHistory } from "./features/session/SessionHistory";
-import { CustomerKiosk } from "./features/kiosk/CustomerKiosk";
-import { ComplianceDashboard } from "./features/session/ComplianceDashboard";
+import { AppShell } from "./layout/AppShell";
+import { LoginPage } from "../features/auth/LoginPage";
+import { AnalyticsDashboard } from "../features/analytics/AnalyticsDashboard";
+import { LiveSession } from "../features/session/LiveSession";
+import { SessionSummary } from "../features/session/SessionSummary";
+import { SessionHistory } from "../features/session/SessionHistory";
+import { CustomerKiosk } from "../features/kiosk/CustomerKiosk";
+import { ComplianceDashboard } from "../features/session/ComplianceDashboard";
 
 type View = "session" | "summary" | "analytics" | "history" | "compliance" | "team";
 
@@ -45,4 +45,3 @@ export function App() {
     </AppShell>
   );
 }
-

@@ -10,6 +10,20 @@ Gen-AI powered multilingual voice assistant for frontline bank staff. The projec
 - Vector search: persistent ChromaDB trusted knowledge retrieval
 - AI adapters: Sarvam/Gemini integration points with grounded RAG fallback
 
+## Project Structure
+
+The source is organized around deployable apps and shared support folders:
+
+- `frontend/src/app`: React app bootstrap, app shell, typed Redux hooks, and store setup
+- `frontend/src/features`: product features such as auth, live session, kiosk, analytics, and history
+- `frontend/src/shared`: reusable UI primitives and utilities
+- `backend/app`: FastAPI API, configuration, models, services, and database access
+- `backend/data`: trusted KB and SOP content used by RAG
+- `deploy`: deployment scripts and infrastructure configuration
+- `docs`: deployment docs plus archived design inspiration
+
+Design-only HTML reference folders are preserved in `docs/design-inspiration` so they no longer clutter the repository root.
+
 ## Run Locally
 
 ```bash

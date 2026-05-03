@@ -1,9 +1,9 @@
 import { AlertTriangle, Calendar, Download, Loader2, RefreshCw, TrendingUp } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Badge } from "../../components/ui/badge";
-import { Button } from "../../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
-import { useAppDispatch, useAppSelector } from "../../hooks";
+import { Badge } from "../../shared/ui/badge";
+import { Button } from "../../shared/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/card";
+import { useAppDispatch, useAppSelector } from "../../app/hooks";
 import { setAnalytics, setAnalyticsLoading, setAnalyticsError } from "./analyticsSlice";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";

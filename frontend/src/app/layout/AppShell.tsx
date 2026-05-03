@@ -13,8 +13,8 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useAppSelector } from "../../hooks";
-import { cn } from "../../lib/utils";
+import { useAppSelector } from "../hooks";
+import { cn } from "../../shared/lib/utils";
 
 type View = "session" | "summary" | "analytics" | "history" | "compliance" | "team";
 

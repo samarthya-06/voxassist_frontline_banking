@@ -16,8 +16,8 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useAppDispatch, useAppSelector } from "../../hooks";
-import { cn } from "../../lib/utils";
+import { useAppDispatch, useAppSelector } from "../../app/hooks";
+import { cn } from "../../shared/lib/utils";
 import { FormInterview } from "./FormInterview";
 import { setListenMode, setMuted, resetSession } from "./sessionSlice";
 import { useVoiceSession } from "./useVoiceSession";

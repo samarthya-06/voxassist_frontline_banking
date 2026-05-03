@@ -1,9 +1,9 @@
 import { Download, Mail, MessageSquareText, Search } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Badge } from "../../components/ui/badge";
-import { Button } from "../../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
-import { useAppSelector } from "../../hooks";
+import { Badge } from "../../shared/ui/badge";
+import { Button } from "../../shared/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/card";
+import { useAppSelector } from "../../app/hooks";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 

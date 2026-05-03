@@ -69,8 +69,8 @@ The frontend is located in `frontend/src` and is built using React, Vite, TypeSc
 
 Important frontend files:
 
-- `frontend/src/App.tsx`: Main application routing between login, live session, summary, analytics, history, and kiosk mode.
-- `frontend/src/components/layout/AppShell.tsx`: Main authenticated shell with top navigation, sidebar, language status, timer, and alerts.
+- `frontend/src/app/App.tsx`: Main application routing between login, live session, summary, analytics, history, and kiosk mode.
+- `frontend/src/app/layout/AppShell.tsx`: Main authenticated shell with top navigation, sidebar, language status, timer, and alerts.
 - `frontend/src/features/auth/LoginPage.tsx`: Staff and manager login screen.
 - `frontend/src/features/session/LiveSession.tsx`: Main staff dashboard for transcript, action suggestions, form filling, SOPs, and guardrails.
 - `frontend/src/features/session/useVoiceSession.ts`: WebSocket connection, recording, WAV conversion, message handling, and TTS playback.
@@ -814,7 +814,7 @@ Overall, the project is suitable for academic demonstration and further developm
 ### Project Resources
 
 - `README.md`
-- `frontend/src/App.tsx`
+- `frontend/src/app/App.tsx`
 - `frontend/src/features/session/LiveSession.tsx`
 - `frontend/src/features/session/useVoiceSession.ts`
 - `frontend/src/features/session/sessionSlice.ts`
