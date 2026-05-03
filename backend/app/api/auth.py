@@ -20,7 +20,11 @@ JWT_EXPIRY_HOURS = 8
 
 # Demo users (in production → MongoDB users collection)
 DEMO_USERS = {
-    "staff1": {"password": "staff123", "role": "staff", "name": "Priya Sharma", "branch": "Central District"},
+    "staff1": {"password": "staff123", "role": "staff", "name": "Priya Sharma", "branch": "Central District", "desk_id": "FD-01"},
+    "staff2": {"password": "staff123", "role": "staff", "name": "Rohan Mehta", "branch": "Central District", "desk_id": "FD-02"},
+    "staff3": {"password": "staff123", "role": "staff", "name": "Neha Iyer", "branch": "Central District", "desk_id": "FD-03"},
+    "staff4": {"password": "staff123", "role": "staff", "name": "Amit Kulkarni", "branch": "Central District", "desk_id": "FD-04"},
+    "staff5": {"password": "staff123", "role": "staff", "name": "Farah Khan", "branch": "Central District", "desk_id": "FD-05"},
     "manager1": {"password": "manager123", "role": "manager", "name": "Anil Deshmukh", "branch": "Central District"},
 }
 
@@ -42,6 +46,8 @@ class LoginResponse(BaseModel):
     role: str
     name: str
     branch: str
+    username: str
+    deskId: str | None = None
 
 
 class UserInfo(BaseModel):
@@ -49,23 +55,38 @@ class UserInfo(BaseModel):
     role: str
     name: str
     branch: str
+    deskId: str | None = None
 
 
 @auth_router.post("/login", response_model=LoginResponse)
 async def login(body: LoginRequest):
     db_user = await repository.get_user(body.username)
+    canonical_username = body.username
     if db_user is not None:
         user = db_user
+        canonical_username = user.get("username", body.username)
     else:
         user = DEMO_USERS.get(body.username)
+        if user is None:
+            employee_aliases = {
+                "104851": "staff1",
+                "104852": "staff2",
+                "104853": "staff3",
+                "104854": "staff4",
+                "104855": "staff5",
+                "200100": "manager1",
+            }
+            canonical_username = employee_aliases.get(body.username, body.username)
+            user = DEMO_USERS.get(canonical_username)
     if not user or not _verify_password(body.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     payload = {
-        "sub": body.username,
+        "sub": canonical_username,
         "role": user["role"],
         "name": user["name"],
         "branch": user["branch"],
+        "deskId": user.get("desk_id") or user.get("deskId"),
         "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRY_HOURS),
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -75,6 +96,8 @@ async def login(body: LoginRequest):
         role=user["role"],
         name=user["name"],
         branch=user["branch"],
+        username=canonical_username,
+        deskId=user.get("desk_id") or user.get("deskId"),
     )
 
 
@@ -83,15 +106,6 @@ def decode_token_value(token: str | None) -> UserInfo:
     if not token:
         raise HTTPException(status_code=401, detail="Missing authorization token")
 
-    # ── Demo Bypass for Kiosk ──
-    if token == "demo":
-        return UserInfo(
-            username="demo_user",
-            role="staff",
-            name="Demo User",
-            branch="Demo Branch"
-        )
-
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         return UserInfo(
@@ -99,6 +113,7 @@ def decode_token_value(token: str | None) -> UserInfo:
             role=payload["role"],
             name=payload["name"],
             branch=payload["branch"],
+            deskId=payload.get("deskId"),
         )
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")

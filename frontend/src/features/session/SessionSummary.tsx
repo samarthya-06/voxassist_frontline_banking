@@ -34,7 +34,12 @@ type CustomerHistoryDoc = {
   };
 };
 
-export function SessionSummary() {
+type SessionSummaryProps = {
+  authToken: string;
+  sessionId: string;
+};
+
+export function SessionSummary({ authToken, sessionId }: SessionSummaryProps) {
   const summary = useAppSelector((state) => state.session.bilingualSummary);
   const entities = useAppSelector((state) => state.session.entities);
   const language = useAppSelector((state) => state.session.language);
@@ -44,7 +49,9 @@ export function SessionSummary() {
   useEffect(() => {
     let cancelled = false;
 
-    fetch(`${API_BASE}/customer/history`)
+    fetch(`${API_BASE}/customer/history`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    })
       .then((resp) => (resp.ok ? resp.json() : Promise.reject(resp)))
       .then((data: { sessions?: CustomerHistoryDoc[] }) => {
         if (cancelled) return;
@@ -65,12 +72,12 @@ export function SessionSummary() {
     return () => {
       cancelled = true;
     };
-  }, [language]);
+  }, [authToken, language]);
 
   const downloadPdf = async () => {
     setDownloading(true);
     try {
-      const resp = await fetch(`${API_BASE}/session/demo-session/receipt`, { method: "POST" });
+      const resp = await fetch(`${API_BASE}/session/${encodeURIComponent(sessionId)}/receipt`, { method: "POST" });
       if (resp.ok) {
         const blob = await resp.blob();
         const url = URL.createObjectURL(blob);

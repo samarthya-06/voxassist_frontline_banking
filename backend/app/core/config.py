@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import Any
 
@@ -22,14 +23,23 @@ class Settings(BaseSettings):
     rag_min_confidence: float = 0.18
     rag_use_llm: bool = False
     ai_fast_mode: bool = True
+    ai_async_tts: bool = True
+    seed_demo_data: bool = False
     allowed_origins: list[str] = ["http://localhost:5173"]
     jwt_secret: str = "voxassist-dev-secret-change-in-production"
 
     @field_validator("allowed_origins", mode="before")
     @classmethod
     def parse_allowed_origins(cls, value: Any) -> Any:
-        if isinstance(value, str) and not value.strip().startswith("["):
-            return [item.strip() for item in value.split(",") if item.strip()]
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.startswith("["):
+                try:
+                    return json.loads(stripped)
+                except json.JSONDecodeError:
+                    # Fallback if JSON is malformed
+                    pass
+            return [item.strip() for item in stripped.split(",") if item.strip()]
         return value
 
     model_config = SettingsConfigDict(

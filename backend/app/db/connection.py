@@ -6,9 +6,10 @@ startup health check, index creation, and graceful shutdown.
 
 import logging
 
+import certifi
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from pymongo import ASCENDING, DESCENDING
-from pymongo.errors import PyMongoError, ServerSelectionTimeoutError
+from pymongo.errors import ConfigurationError, PyMongoError, ServerSelectionTimeoutError
 
 from ..core.config import settings
 
@@ -28,6 +29,7 @@ def get_client() -> AsyncIOMotorClient:
             serverSelectionTimeoutMS=2000,
             maxPoolSize=10,
             minPoolSize=1,
+            tlsCAFile=certifi.where(),
         )
     return _client
 
@@ -48,19 +50,20 @@ def is_mongo_available() -> bool:
 async def ensure_indexes() -> None:
     """Create all required indexes and verify MongoDB connectivity."""
     global _mongo_available
-    db = get_db()
 
     try:
+        db = get_db()
         await get_client().admin.command("ping")
         _mongo_available = True
         logger.info("MongoDB connected: %s/%s", settings.mongodb_uri, settings.mongodb_db)
-    except (PyMongoError, ServerSelectionTimeoutError) as exc:
+    except (ConfigurationError, PyMongoError, ServerSelectionTimeoutError) as exc:
         _mongo_available = False
         logger.warning("MongoDB unavailable — using in-memory fallback: %s", exc)
         return
 
     # ── users ─────────────────────────────────────────────────────────────
     await db.users.create_index([("username", ASCENDING)], unique=True)
+    await db.users.create_index([("employee_id", ASCENDING)])
 
     # ── sessions ──────────────────────────────────────────────────────────
     await db.sessions.create_index([("session_id", ASCENDING)], unique=True)

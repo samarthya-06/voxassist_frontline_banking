@@ -25,82 +25,84 @@ import {
 } from "./sessionSlice";
 
 type ServerMessage =
-  | { 
-      type: "transcript"; 
-      item: TranscriptItem; 
-      entities?: Partial<BankingEntities>; 
-      actionChips?: string[]; 
-      assistantResponse?: string; 
-      assistantAudio?: string; 
-    }
+  | {
+    type: "transcript";
+    item: TranscriptItem;
+    entities?: Partial<BankingEntities>;
+    actionChips?: string[];
+    assistantResponse?: string;
+    assistantAudio?: string;
+    assistantAudioPending?: boolean;
+  }
   | { type: "sop"; result: SopResult }
   | { type: "compliance"; alert: ComplianceAlert | null }
   | { type: "summary"; english: string[]; customerLanguage: string[] }
   | { type: "language_detected"; language: string; code: string }
-  | { type: "tts_audio"; audio_b64: string | null; text: string }
+  | { type: "tts_audio"; audio_b64: string | null; text: string; audience?: "all" | "staff" | "customer"; isFinalChunk?: boolean }
   | { type: "escalation_alert"; message: string }
   // Form interview messages
   | {
-      type: "form_started";
-      formDefinition: FormDefinition;
-      formState: { formType: string; totalFields: number; filledCount: number; progress: number; filledFields: Record<string, string> };
-      currentField: FormCurrentField;
-      questionText: string;
-      questionTranslated: string;
-      questionAudio: string | null;
-    }
+    type: "form_started";
+    formDefinition: FormDefinition;
+    formState: { formType: string; totalFields: number; filledCount: number; progress: number; filledFields: Record<string, string> };
+    currentField: FormCurrentField;
+    questionText: string;
+    questionTranslated: string;
+    questionAudio: string | null;
+  }
   | {
-      type: "form_field_filled";
-      formState: { filledCount: number; progress: number; filledFields: Record<string, string>; totalFields: number };
-      filledFieldKey: string;
-      filledFieldLabel: string;
-      filledFieldValue: string;
-      nativeAnswer: string;
-      englishAnswer: string;
-      currentField: FormCurrentField;
-      questionText: string;
-      questionTranslated: string;
-      questionAudio: string | null;
-    }
+    type: "form_field_filled";
+    formState: { filledCount: number; progress: number; filledFields: Record<string, string>; totalFields: number };
+    filledFieldKey: string;
+    filledFieldLabel: string;
+    filledFieldValue: string;
+    nativeAnswer: string;
+    englishAnswer: string;
+    currentField: FormCurrentField;
+    questionText: string;
+    questionTranslated: string;
+    questionAudio: string | null;
+  }
   | {
-      type: "form_complete";
-      formState: { filledCount: number; progress: number; filledFields: Record<string, string>; totalFields: number };
-      filledFieldKey: string;
-      filledFieldLabel: string;
-      filledFieldValue: string;
-      nativeAnswer: string;
-      englishAnswer: string;
-      completionText: string;
-      completionTranslated: string;
-      completionAudio: string | null;
-    }
+    type: "form_complete";
+    formState: { filledCount: number; progress: number; filledFields: Record<string, string>; totalFields: number };
+    filledFieldKey: string;
+    filledFieldLabel: string;
+    filledFieldValue: string;
+    nativeAnswer: string;
+    englishAnswer: string;
+    completionText: string;
+    completionTranslated: string;
+    completionAudio: string | null;
+  }
   | {
-      type: "form_retry";
-      formState: { filledCount: number; progress: number; filledFields: Record<string, string>; totalFields: number };
-      currentField: FormCurrentField;
-      questionText: string;
-      questionTranslated: string;
-      questionAudio: string | null;
-    }
+    type: "form_retry";
+    formState: { filledCount: number; progress: number; filledFields: Record<string, string>; totalFields: number };
+    currentField: FormCurrentField;
+    questionText: string;
+    questionTranslated: string;
+    questionAudio: string | null;
+  }
   | { type: "form_pdf_ready"; downloadUrl: string }
   | { type: "form_cancelled" }
   | { type: "form_error"; message: string };
 
 const WS_URL = import.meta.env.VITE_VOXASSIST_WS_URL ?? "ws://localhost:8000/ws/session/demo-session";
 
-function buildWsUrl(authToken?: string) {
-  if (!authToken) return WS_URL;
+function buildWsUrl(authToken?: string, sessionId = "demo-session") {
+  const baseWsUrl = WS_URL.includes("demo-session") ? WS_URL.replace("demo-session", sessionId) : WS_URL;
+  if (!authToken) return baseWsUrl;
   try {
-    const url = new URL(WS_URL);
+    const url = new URL(baseWsUrl);
     url.searchParams.set("token", authToken);
     return url.toString();
   } catch {
-    const separator = WS_URL.includes("?") ? "&" : "?";
-    return `${WS_URL}${separator}token=${encodeURIComponent(authToken)}`;
+    const separator = baseWsUrl.includes("?") ? "&" : "?";
+    return `${baseWsUrl}${separator}token=${encodeURIComponent(authToken)}`;
   }
 }
 
-export function useVoiceSession(authToken?: string) {
+export function useVoiceSession(authToken?: string, sessionId = "demo-session") {
   const dispatch = useAppDispatch();
   const selectedLanguage = useAppSelector((state) => state.session.language);
   const selectedLanguageCode = useAppSelector((state) => state.session.languageCode);
@@ -116,10 +118,18 @@ export function useVoiceSession(authToken?: string) {
   const reconnectAttemptRef = useRef(0);
   const shouldReconnectRef = useRef(true);
   const selectedLanguageRef = useRef({ language: selectedLanguage, code: selectedLanguageCode });
+  const audioPlaybackQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const recordingAutoStopTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
   useEffect(() => {
     selectedLanguageRef.current = { language: selectedLanguage, code: selectedLanguageCode };
   }, [selectedLanguage, selectedLanguageCode]);
+
+  const enqueueAudio = useCallback((audioB64: string) => {
+    audioPlaybackQueueRef.current = audioPlaybackQueueRef.current
+      .catch(() => { })
+      .then(() => playAudioBase64Async(audioB64));
+  }, []);
 
   const handleMessage = useCallback((event: MessageEvent) => {
     const data = JSON.parse(event.data) as ServerMessage;
@@ -129,7 +139,7 @@ export function useVoiceSession(authToken?: string) {
         dispatch(addTranscript(data.item));
         if (data.entities) dispatch(mergeEntities(data.entities));
         if (data.actionChips) dispatch(setActionChips(data.actionChips));
-        
+
         // Auto-play assistant response audio if provided
         if (data.assistantResponse) {
           dispatch(addTranscript({
@@ -144,15 +154,7 @@ export function useVoiceSession(authToken?: string) {
         }
 
         if (data.assistantAudio) {
-          try {
-            const audioBlob = base64ToBlob(data.assistantAudio, "audio/wav");
-            const audioUrl = URL.createObjectURL(audioBlob);
-            const audio = new Audio(audioUrl);
-            audio.play().catch(() => {});
-            audio.onended = () => URL.revokeObjectURL(audioUrl);
-          } catch {
-            console.warn("Failed to play assistant audio");
-          }
+          enqueueAudio(data.assistantAudio);
         }
         break;
 
@@ -173,16 +175,11 @@ export function useVoiceSession(authToken?: string) {
         break;
 
       case "tts_audio":
+        if (data.audience === "customer") {
+          break;
+        }
         if (data.audio_b64) {
-          try {
-            const audioBlob = base64ToBlob(data.audio_b64, "audio/wav");
-            const audioUrl = URL.createObjectURL(audioBlob);
-            const audio = new Audio(audioUrl);
-            audio.play().catch(() => {});
-            audio.onended = () => URL.revokeObjectURL(audioUrl);
-          } catch {
-            console.warn("Failed to play TTS audio");
-          }
+          enqueueAudio(data.audio_b64);
         }
         break;
 
@@ -200,9 +197,7 @@ export function useVoiceSession(authToken?: string) {
           questionTranslated: data.questionTranslated,
         }));
         // Auto-play the first question TTS
-        if (data.questionAudio) {
-          playAudioBase64(data.questionAudio);
-        }
+        if (data.questionAudio) enqueueAudio(data.questionAudio);
         break;
 
       case "form_field_filled":
@@ -215,9 +210,7 @@ export function useVoiceSession(authToken?: string) {
           questionTranslated: data.questionTranslated,
         }));
         // Auto-play the next question TTS
-        if (data.questionAudio) {
-          playAudioBase64(data.questionAudio);
-        }
+        if (data.questionAudio) enqueueAudio(data.questionAudio);
         break;
 
       case "form_complete":
@@ -227,16 +220,12 @@ export function useVoiceSession(authToken?: string) {
           formState: data.formState,
         }));
         // Auto-play completion message
-        if (data.completionAudio) {
-          playAudioBase64(data.completionAudio);
-        }
+        if (data.completionAudio) enqueueAudio(data.completionAudio);
         break;
 
       case "form_retry":
         // Same question again — just play the TTS
-        if (data.questionAudio) {
-          playAudioBase64(data.questionAudio);
-        }
+        if (data.questionAudio) enqueueAudio(data.questionAudio);
         break;
 
       case "form_pdf_ready":
@@ -251,7 +240,7 @@ export function useVoiceSession(authToken?: string) {
         console.error("Form error:", data.message);
         break;
     }
-  }, [dispatch]);
+  }, [dispatch, enqueueAudio]);
 
   const sendSelectedLanguage = useCallback((socket: WebSocket | null = wsRef.current) => {
     if (socket?.readyState === WebSocket.OPEN) {
@@ -262,7 +251,7 @@ export function useVoiceSession(authToken?: string) {
   const stopWaveform = useCallback(() => {
     if (waveformFrameRef.current) cancelAnimationFrame(waveformFrameRef.current);
     waveformFrameRef.current = null;
-    waveformAudioRef.current?.close().catch(() => {});
+    waveformAudioRef.current?.close().catch(() => { });
     waveformAudioRef.current = null;
     const canvas = waveformCanvasRef.current;
     const ctx = canvas?.getContext("2d");
@@ -305,7 +294,7 @@ export function useVoiceSession(authToken?: string) {
 
     const reconnect = () => {
       dispatch(setConnectionStatus("connecting"));
-      const ws = new WebSocket(buildWsUrl(authToken));
+      const ws = new WebSocket(buildWsUrl(authToken, sessionId));
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -336,18 +325,21 @@ export function useVoiceSession(authToken?: string) {
       }
       stopWaveform();
       streamRef.current?.getTracks().forEach((track) => track.stop());
+      if (recordingAutoStopTimerRef.current) window.clearTimeout(recordingAutoStopTimerRef.current);
     };
-  }, [authToken, dispatch, handleMessage, sendSelectedLanguage, stopWaveform]);
+  }, [authToken, dispatch, handleMessage, sendSelectedLanguage, sessionId, stopWaveform]);
 
   /**
    * Start recording. Audio is buffered locally and sent as one
    * complete blob when stopRecording() is called.
    */
   async function startRecording(mode: "customer" | "staff") {
+    console.log("startRecording called with mode:", mode);
     modeRef.current = mode;
     chunksRef.current = [];
 
     if (!navigator.mediaDevices?.getUserMedia) {
+      console.warn("navigator.mediaDevices.getUserMedia not supported, using demo mode");
       // No mic — send a single demo turn
       wsRef.current?.send(JSON.stringify({ type: "demo_text", mode }));
       dispatch(setRecording(true));
@@ -355,7 +347,9 @@ export function useVoiceSession(authToken?: string) {
     }
 
     try {
+      console.log("Requesting microphone access...");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log("Microphone access granted.");
       streamRef.current = stream;
       startWaveform(stream);
 
@@ -368,26 +362,45 @@ export function useVoiceSession(authToken?: string) {
 
       // When recording stops, combine all chunks and send once
       recorder.onstop = async () => {
+        console.log("Recording stopped. Processing audio chunks...");
+        if (recordingAutoStopTimerRef.current) window.clearTimeout(recordingAutoStopTimerRef.current);
+        recordingAutoStopTimerRef.current = null;
         stopWaveform();
         stream.getTracks().forEach((t) => t.stop());
 
-        if (chunksRef.current.length === 0) return;
+        if (chunksRef.current.length === 0) {
+          console.warn("No audio chunks recorded.");
+          return;
+        }
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType });
+        console.log("Recorded blob size:", blob.size, "mime:", recorder.mimeType);
 
         // Convert to WAV for Sarvam compatibility
         const wavBytes = await blobToWav(blob);
+        console.log("Converted to WAV, size:", wavBytes.byteLength);
 
         if (wsRef.current?.readyState === WebSocket.OPEN) {
+          console.log("Sending audio to server...");
           // Tell backend which mode this audio belongs to
           wsRef.current.send(JSON.stringify({ type: "audio_meta", mode: modeRef.current }));
           wsRef.current.send(wavBytes);
+        } else {
+          console.error("WebSocket is not open. ReadyState:", wsRef.current?.readyState);
         }
       };
 
       recorder.start();          // record the full segment, no timeslice
+      recordingAutoStopTimerRef.current = window.setTimeout(() => {
+        if (recorder.state !== "inactive") {
+          recorder.stop();
+          dispatch(setRecording(false));
+        }
+      }, 24000);
+      console.log("MediaRecorder started.");
       dispatch(setRecording(true));
       wsRef.current?.send(JSON.stringify({ type: "start", mode }));
-    } catch {
+    } catch (err) {
+      console.error("Mic permission denied or error:", err);
       // Mic permission denied — single demo turn
       wsRef.current?.send(JSON.stringify({ type: "demo_text", mode }));
       dispatch(setRecording(true));
@@ -396,6 +409,8 @@ export function useVoiceSession(authToken?: string) {
 
   function stopRecording(_mode: "customer" | "staff") {
     const recorder = recorderRef.current;
+    if (recordingAutoStopTimerRef.current) window.clearTimeout(recordingAutoStopTimerRef.current);
+    recordingAutoStopTimerRef.current = null;
     if (recorder && recorder.state !== "inactive") {
       recorder.stop();           // triggers onstop → sends audio
     } else {
@@ -459,13 +474,25 @@ function base64ToBlob(b64: string, mimeType: string): Blob {
   return new Blob([arr], { type: mimeType });
 }
 
-function playAudioBase64(b64: string) {
+async function playAudioBase64Async(b64: string): Promise<void> {
   try {
     const blob = base64ToBlob(b64, "audio/wav");
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
-    audio.play().catch(() => {});
-    audio.onended = () => URL.revokeObjectURL(url);
+    await new Promise<void>((resolve) => {
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        resolve();
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve();
+      };
+      audio.play().catch(() => {
+        URL.revokeObjectURL(url);
+        resolve();
+      });
+    });
   } catch {
     console.warn("Failed to play audio");
   }

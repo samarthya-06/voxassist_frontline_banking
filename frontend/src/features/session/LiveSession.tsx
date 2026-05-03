@@ -12,6 +12,8 @@ import {
   Search,
   ShieldAlert,
   Sparkles,
+  Headset,
+  UserRound,
   Volume2,
   X,
 } from "lucide-react";
@@ -78,10 +80,11 @@ const FORM_INTENTS: Array<FormSuggestion & { keywords: string[] }> = [
 
 type LiveSessionProps = {
   authToken: string;
+  sessionId: string;
   onEndSession?: () => void;
 };
 
-export function LiveSession({ authToken, onEndSession }: LiveSessionProps) {
+export function LiveSession({ authToken, sessionId, onEndSession }: LiveSessionProps) {
   const dispatch = useAppDispatch();
   const session = useAppSelector((state) => state.session);
   const {
@@ -94,7 +97,7 @@ export function LiveSession({ authToken, onEndSession }: LiveSessionProps) {
     startFormInterview,
     cancelFormInterview,
     generateFormPdf,
-  } = useVoiceSession(authToken);
+  } = useVoiceSession(authToken, sessionId);
   const [sopExpanded, setSopExpanded] = useState(true);
   const [sopQuery, setSopQuery] = useState("");
   const [formSuggestion, setFormSuggestion] = useState<FormSuggestion | null>(null);
@@ -195,6 +198,14 @@ export function LiveSession({ authToken, onEndSession }: LiveSessionProps) {
             <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-outline-variant bg-surface-bright px-4">
               <h2 className="text-[16px] font-semibold leading-5 text-on-surface">Live Transcript</h2>
               <div className="flex items-center gap-2">
+                <a
+                  href={`/kiosk?session=${encodeURIComponent(sessionId)}&token=demo`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded border border-outline-variant bg-white px-2 py-1 text-[11px] font-semibold text-primary hover:bg-surface-container-low"
+                >
+                  Customer Screen
+                </a>
                 <div className="relative">
                   <select
                     value={session.languageCode}
@@ -529,6 +540,39 @@ export function LiveSession({ authToken, onEndSession }: LiveSessionProps) {
           {session.isMuted ? "Unmute" : "Mute"}
         </button>
 
+        <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 p-1">
+          <button
+            type="button"
+            aria-label="Customer talk mode"
+            disabled={session.isRecording}
+            onClick={() => dispatch(setListenMode("customer"))}
+            className={cn(
+              "inline-flex h-11 items-center gap-2 rounded px-4 text-[12px] font-bold uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+              session.listenMode === "customer"
+                ? "bg-white text-blue-900 shadow-sm"
+                : "text-slate-500 hover:text-blue-900"
+            )}
+          >
+            <UserRound className="h-4 w-4" />
+            Customer
+          </button>
+          <button
+            type="button"
+            aria-label="Staff talk mode"
+            disabled={session.isRecording}
+            onClick={() => dispatch(setListenMode("staff"))}
+            className={cn(
+              "inline-flex h-11 items-center gap-2 rounded px-4 text-[12px] font-bold uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+              session.listenMode === "staff"
+                ? "bg-white text-blue-900 shadow-sm"
+                : "text-slate-500 hover:text-blue-900"
+            )}
+          >
+            <Headset className="h-4 w-4" />
+            Staff
+          </button>
+        </div>
+
         <button
           aria-label="Push-to-Talk"
           onClick={toggleRecording}
@@ -556,7 +600,9 @@ export function LiveSession({ authToken, onEndSession }: LiveSessionProps) {
             )}
           />
           <Mic className="relative z-10 mb-1 h-7 w-7" />
-          <span className="relative z-10">{session.isMuted ? "Muted" : session.isRecording ? "Recording…" : "Push-to-Talk"}</span>
+          <span className="relative z-10">
+            {session.isMuted ? "Muted" : session.isRecording ? `Recording ${session.listenMode}...` : "Push-to-Talk"}
+          </span>
         </button>
 
         <button

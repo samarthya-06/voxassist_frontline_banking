@@ -208,7 +208,7 @@ class AIOrchestrator:
         return {"api-subscription-key": settings.sarvam_api_key or ""}
 
     # ── Sarvam: Speech-to-Text ───────────────────────────────────────────────
-    async def _call_sarvam_stt(self, audio_bytes: bytes) -> dict:
+    async def _call_sarvam_stt(self, audio_bytes: bytes, language_code: str | None = None) -> dict:
         """POST audio to Sarvam saaras:v3 STT via multipart form-data.
 
         Returns {transcript, language_code, confidence}.
@@ -218,17 +218,21 @@ class AIOrchestrator:
 
         try:
             files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
+            lang_code = language_code or self.detected_language_code or "hi-IN"
             data = {
                 "model": "saaras:v3",
-                "language_code": self.detected_language_code or "unknown",
-                "mode": "transcribe",  # Get native text first
+                "language_code": lang_code,
+                "mode": "transcribe",
             }
+            logger.info("Calling Sarvam STT with lang_code: %s", lang_code)
             resp = await self.http.post(
                 f"{SARVAM_BASE}/speech-to-text",
                 files=files,
                 data=data,
                 headers=self.sarvam_auth_headers,
             )
+            if resp.status_code != 200:
+                logger.error("Sarvam STT error response: %s", resp.text)
             resp.raise_for_status()
             result = resp.json()
             transcript = result.get("transcript", "")
@@ -322,7 +326,7 @@ class AIOrchestrator:
         """Create a broadcastable assistant message with optional TTS audio."""
         lang_code = language_code or self.detected_language_code or "mr-IN"
         lang_name = LANGUAGE_NAMES.get(lang_code, "English")
-        audio_b64 = await self._call_sarvam_tts(text, lang_code)
+        audio_b64 = None if settings.ai_async_tts else await self._call_sarvam_tts(text, lang_code)
         now = datetime.now().strftime("%H:%M")
         item = TranscriptItem(
             id=str(uuid4()),
@@ -336,12 +340,26 @@ class AIOrchestrator:
         self.transcript_history.append(item.model_dump())
         self.last_translated_text = text
         self.last_language_code = lang_code
-        return {
+        payload = {
             "type": "transcript",
             "item": item.model_dump(),
             "entities": {},
             "actionChips": [],
-            "assistantAudio": audio_b64,
+        }
+        if settings.ai_async_tts:
+            payload["assistantTtsText"] = text
+            payload["assistantTtsLanguageCode"] = lang_code
+        else:
+            payload["assistantAudio"] = audio_b64
+        return payload
+
+    async def build_tts_audio_message(self, text: str, language_code: str | None = None) -> dict:
+        """Create a standalone TTS message for delayed audio playback."""
+        lang_code = language_code or self.detected_language_code or "mr-IN"
+        return {
+            "type": "tts_audio",
+            "audio_b64": await self._call_sarvam_tts(text, lang_code),
+            "text": text,
         }
 
     async def start_customer_session(self) -> dict:
@@ -674,7 +692,7 @@ class AIOrchestrator:
     async def process_audio_turn(self, audio: bytes, mode: str) -> dict:
         """Full pipeline: STT → translate → extract entities → suggest actions."""
         # 1. Speech-to-Text via Sarvam (Native Transcribe + auto language detection)
-        stt_result = await self._call_sarvam_stt(audio)
+        stt_result = await self._call_sarvam_stt(audio, "en-IN" if mode == "staff" else None)
 
         lang_detected = None
         if self.detected_language is None:
@@ -792,6 +810,11 @@ class AIOrchestrator:
                     rag_answer = await self._rag_customer_answer(english_text, self.detected_language_code or source_code)
                     if rag_answer and "could not find" not in rag_answer.lower() and "not found" not in rag_answer.lower() and len(rag_answer) > 10:
                         assistant_response_text = rag_answer
+                    elif settings.ai_fast_mode:
+                        assistant_response_text = await self._localized_text(
+                            "I can help with account opening, fixed deposits, KYC, cards, loans, lockers, cheques, transfers, and other banking services. Please tell me what you need.",
+                            self.detected_language_code or source_code,
+                        )
                     else:
                         # RAG had no match — use LLM as a smart banking assistant
                         lang_code = self.detected_language_code or source_code
@@ -825,8 +848,10 @@ class AIOrchestrator:
             else:
                 self.negative_streak = 0
 
-            # C. Convert response to TTS
-            assistant_audio_b64 = await self._call_sarvam_tts(assistant_response_text, self.detected_language_code or "mr-IN")
+            # C. Convert response to TTS. In async mode, text goes to the UI first
+            # and the WebSocket route sends audio in a follow-up message.
+            if not settings.ai_async_tts:
+                assistant_audio_b64 = await self._call_sarvam_tts(assistant_response_text, self.detected_language_code or "mr-IN")
         else:
             result_auto_form = None
 
@@ -861,9 +886,18 @@ class AIOrchestrator:
             "actionChips": chips,
         }
 
+        if mode == "staff" and translated:
+            result["translatedSpeechText"] = translated
+            result["translatedSpeechLanguageCode"] = self.detected_language_code or "mr-IN"
+            result["translatedSpeechAudience"] = "customer"
+
         if assistant_response_text:
             result["assistantResponse"] = assistant_response_text
-            result["assistantAudio"] = assistant_audio_b64
+            if settings.ai_async_tts:
+                result["assistantTtsText"] = assistant_response_text
+                result["assistantTtsLanguageCode"] = self.detected_language_code or "mr-IN"
+            else:
+                result["assistantAudio"] = assistant_audio_b64
         if result_auto_form:
             result["autoStartForm"] = result_auto_form
 
@@ -881,16 +915,26 @@ class AIOrchestrator:
 
     async def process_text_turn(self, text: str, mode: str, language_code: str | None = None) -> dict:
         """Process browser speech-recognition text when provider STT is unavailable."""
-        lang_info = self.set_language(language_code or self.detected_language_code or "mr-IN")
-        source_code = lang_info["code"]
-        language = lang_info["language"]
-
-        if source_code != "en-IN":
-            english_text = await self._call_sarvam_translate(text, source_code, "en-IN")
-            if english_text == text:
-                english_text = self._english_hint_for_native_text(text)
-        else:
+        if mode == "staff":
+            source_code = "en-IN"
+            language = "English"
             english_text = text
+            translated_text = await self._call_sarvam_translate(
+                text,
+                "en-IN",
+                self.detected_language_code or language_code or "mr-IN",
+            )
+        else:
+            lang_info = self.set_language(language_code or self.detected_language_code or "mr-IN")
+            source_code = lang_info["code"]
+            language = lang_info["language"]
+            if source_code != "en-IN":
+                english_text = await self._call_sarvam_translate(text, source_code, "en-IN")
+                if english_text == text:
+                    english_text = self._english_hint_for_native_text(text)
+            else:
+                english_text = text
+            translated_text = english_text
 
         now = datetime.now().strftime("%H:%M")
         speaker = "staff" if mode == "staff" else "customer"
@@ -899,7 +943,7 @@ class AIOrchestrator:
             speaker=speaker,
             sourceLanguage=language if speaker == "customer" else "English",
             originalText=text,
-            translatedText=english_text,
+            translatedText=translated_text,
             confidence=1.0,
             timestamp=now,
         )
@@ -951,6 +995,11 @@ class AIOrchestrator:
                     rag_answer = await self._rag_customer_answer(english_text, source_code)
                     if rag_answer and "could not find" not in rag_answer.lower() and "not found" not in rag_answer.lower() and len(rag_answer) > 10:
                         assistant_response_text = rag_answer
+                    elif settings.ai_fast_mode:
+                        assistant_response_text = await self._localized_text(
+                            "I can help with account opening, fixed deposits, KYC, cards, loans, lockers, cheques, transfers, and other banking services. Please tell me what you need.",
+                            source_code,
+                        )
                     else:
                         # RAG had no match — use LLM as a smart banking assistant
                         lang_name = self.detected_language or "Hindi"
@@ -976,7 +1025,8 @@ class AIOrchestrator:
                                 source_code,
                             )
 
-            assistant_audio_b64 = await self._call_sarvam_tts(assistant_response_text, source_code)
+            if not settings.ai_async_tts:
+                assistant_audio_b64 = await self._call_sarvam_tts(assistant_response_text, source_code)
 
         # Await parallel enrichment tasks
         entities = await entities_task
@@ -995,9 +1045,17 @@ class AIOrchestrator:
             "entities": entities,
             "actionChips": chips,
         }
+        if speaker == "staff" and translated_text:
+            result["translatedSpeechText"] = translated_text
+            result["translatedSpeechLanguageCode"] = self.detected_language_code or language_code or "mr-IN"
+            result["translatedSpeechAudience"] = "customer"
         if assistant_response_text:
             result["assistantResponse"] = assistant_response_text
-            result["assistantAudio"] = assistant_audio_b64
+            if settings.ai_async_tts:
+                result["assistantTtsText"] = assistant_response_text
+                result["assistantTtsLanguageCode"] = source_code
+            else:
+                result["assistantAudio"] = assistant_audio_b64
         if result_auto_form:
             result["autoStartForm"] = result_auto_form
         return result

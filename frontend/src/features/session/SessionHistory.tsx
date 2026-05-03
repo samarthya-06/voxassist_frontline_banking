@@ -45,6 +45,11 @@ type SessionRecord = {
 };
 
 type DetailViewSession = SessionRecord | null;
+type TimeRange = "today" | "week" | "month" | "year" | "custom_day" | "custom_month" | "custom_year" | "all";
+
+type SessionHistoryProps = {
+  authToken: string;
+};
 
 function formatTimestamp(iso: string): string {
   try {
@@ -62,19 +67,37 @@ function formatTimestamp(iso: string): string {
   }
 }
 
-export function SessionHistory() {
+export function SessionHistory({ authToken }: SessionHistoryProps) {
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterService, setFilterService] = useState("all");
   const [selectedSession, setSelectedSession] = useState<DetailViewSession>(null);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const [timeRange, setTimeRange] = useState<TimeRange>("week");
+  const [selectedDate, setSelectedDate] = useState(todayIso);
+  const [selectedMonth, setSelectedMonth] = useState(todayIso.slice(0, 7));
+  const [selectedYear, setSelectedYear] = useState(todayIso.slice(0, 4));
+
+  const buildParams = () => {
+    const params = new URLSearchParams();
+    if (timeRange === "custom_day") params.set("date", selectedDate);
+    else if (timeRange === "custom_month") params.set("month", selectedMonth);
+    else if (timeRange === "custom_year") params.set("year", selectedYear);
+    else params.set("range", timeRange);
+    if (searchQuery.trim()) params.set("search", searchQuery.trim());
+    if (filterService !== "all") params.set("service", filterService);
+    return params;
+  };
 
   // Fetch sessions from backend
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
 
-    fetch(`${API_BASE}/sessions`)
+    fetch(`${API_BASE}/sessions?${buildParams().toString()}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    })
       .then((resp) => (resp.ok ? resp.json() : Promise.reject(resp)))
       .then((data: { sessions?: SessionRecord[] }) => {
         if (!cancelled) {
@@ -91,26 +114,15 @@ export function SessionHistory() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authToken, filterService, searchQuery, selectedDate, selectedMonth, selectedYear, timeRange]);
 
-  const filteredSessions = sessions.filter((session) => {
-    const s = session.summary;
-    const customer = s.entities?.customerName ?? "";
-    const matchesSearch =
-      !searchQuery ||
-      customer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      session.session_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.service.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter =
-      filterService === "all" || s.service.includes(filterService);
-    return matchesSearch && matchesFilter;
-  });
+  const filteredSessions = sessions;
 
   const uniqueServices = [...new Set(sessions.map((s) => s.summary.service).filter(Boolean))];
 
   // Compute summary stats
-  const totalSessions = sessions.length;
-  const totalDurationSecs = sessions.reduce((acc, s) => {
+  const totalSessions = filteredSessions.length;
+  const totalDurationSecs = filteredSessions.reduce((acc, s) => {
     const parts = (s.summary.duration ?? "").split(":");
     if (parts.length === 2) {
       try {
@@ -121,8 +133,31 @@ export function SessionHistory() {
   }, 0);
   const avgDurationSecs = totalSessions > 0 ? Math.round(totalDurationSecs / totalSessions) : 0;
   const avgDuration = `${String(Math.floor(avgDurationSecs / 60)).padStart(2, "0")}:${String(avgDurationSecs % 60).padStart(2, "0")}`;
-  const formsFilled = sessions.filter((s) => (s.summary.formsFilled?.length ?? 0) > 0).length;
-  const escalations = sessions.filter((s) => s.summary.status === "Escalated").length;
+  const formsFilled = filteredSessions.filter((s) => (s.summary.formsFilled?.length ?? 0) > 0).length;
+  const escalations = filteredSessions.filter((s) => s.summary.status === "Escalated").length;
+
+  const exportSessions = async (format: "csv" | "pdf", sessionId?: string) => {
+    const params = buildParams();
+    params.set("format", format);
+    if (sessionId) {
+      params.delete("search");
+      params.delete("service");
+      params.set("search", sessionId);
+    }
+    const resp = await fetch(`${API_BASE}/sessions/export?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    if (!resp.ok) return;
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `voxassist-sessions.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
 
   // ── Detail View ──
   if (selectedSession) {
@@ -146,9 +181,13 @@ export function SessionHistory() {
               {selectedSession.session_id} · {formatTimestamp(selectedSession.timestamp)}
             </p>
           </div>
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => exportSessions("csv", selectedSession.session_id)}>
             <Download className="h-4 w-4" />
-            Export
+            CSV
+          </Button>
+          <Button onClick={() => exportSessions("pdf", selectedSession.session_id)}>
+            <Download className="h-4 w-4" />
+            PDF
           </Button>
         </div>
 
@@ -314,14 +353,62 @@ export function SessionHistory() {
             Browse past customer interactions, transcripts, and form records.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
-            <Calendar className="h-4 w-4" />
-            This Week
-          </Button>
-          <Button variant="outline">
+        <div className="flex flex-wrap gap-2">
+          {([
+            ["today", "Today"],
+            ["week", "This Week"],
+            ["month", "This Month"],
+            ["year", "This Year"],
+            ["all", "All"],
+          ] as [TimeRange, string][]).map(([key, label]) => (
+            <Button
+              key={key}
+              variant={timeRange === key ? "primary" : "outline"}
+              onClick={() => setTimeRange(key)}
+            >
+              <Calendar className="h-4 w-4" />
+              {label}
+            </Button>
+          ))}
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(event) => {
+              setSelectedDate(event.target.value);
+              setTimeRange("custom_day");
+            }}
+            className="h-9 rounded border border-outline-variant bg-white px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            aria-label="Filter history by day"
+          />
+          <input
+            type="month"
+            value={selectedMonth}
+            onChange={(event) => {
+              setSelectedMonth(event.target.value);
+              setTimeRange("custom_month");
+            }}
+            className="h-9 rounded border border-outline-variant bg-white px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            aria-label="Filter history by month"
+          />
+          <input
+            type="number"
+            value={selectedYear}
+            onChange={(event) => {
+              setSelectedYear(event.target.value);
+              setTimeRange("custom_year");
+            }}
+            min="2020"
+            max="2100"
+            className="h-9 w-24 rounded border border-outline-variant bg-white px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            aria-label="Filter history by year"
+          />
+          <Button variant="outline" onClick={() => exportSessions("csv")}>
             <Download className="h-4 w-4" />
-            Export All
+            CSV
+          </Button>
+          <Button variant="outline" onClick={() => exportSessions("pdf")}>
+            <Download className="h-4 w-4" />
+            PDF
           </Button>
         </div>
       </div>

@@ -27,20 +27,43 @@ function Bar({ label, value }: { label: string; value: number }) {
   );
 }
 
-type TimeRange = "today" | "week" | "month";
+type TimeRange = "today" | "week" | "month" | "year" | "custom_day" | "custom_month" | "custom_year";
 
-export function AnalyticsDashboard() {
+type AnalyticsDashboardProps = {
+  authToken: string;
+};
+
+export function AnalyticsDashboard({ authToken }: AnalyticsDashboardProps) {
   const dispatch = useAppDispatch();
   const analytics = useAppSelector((state) => state.analytics);
   const [timeRange, setTimeRange] = useState<TimeRange>("today");
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const [selectedDate, setSelectedDate] = useState(todayIso);
+  const [selectedMonth, setSelectedMonth] = useState(todayIso.slice(0, 7));
+  const [selectedYear, setSelectedYear] = useState(todayIso.slice(0, 4));
   const [refreshing, setRefreshing] = useState(false);
+
+  const buildParams = useCallback(() => {
+    const params = new URLSearchParams();
+    if (timeRange === "custom_day") {
+      params.set("date", selectedDate);
+    } else if (timeRange === "custom_month") {
+      params.set("month", selectedMonth);
+    } else if (timeRange === "custom_year") {
+      params.set("year", selectedYear);
+    } else {
+      params.set("range", timeRange);
+    }
+    return params;
+  }, [selectedDate, selectedMonth, selectedYear, timeRange]);
 
   const fetchAnalytics = useCallback(() => {
     dispatch(setAnalyticsLoading(true));
     setRefreshing(true);
 
-    const rangeParam = timeRange === "today" ? "today" : timeRange === "week" ? "week" : timeRange === "month" ? "month" : "all";
-    fetch(`${API_BASE}/analytics/branch?range=${rangeParam}`)
+    fetch(`${API_BASE}/analytics/branch?${buildParams().toString()}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    })
       .then((resp) => (resp.ok ? resp.json() : Promise.reject(resp)))
       .then((data) => {
         dispatch(setAnalytics(data));
@@ -51,7 +74,28 @@ export function AnalyticsDashboard() {
       .finally(() => {
         setRefreshing(false);
       });
-  }, [dispatch, timeRange]);
+  }, [authToken, buildParams, dispatch]);
+
+  const exportAnalytics = useCallback(async (format: "csv" | "pdf") => {
+    const params = buildParams();
+    params.set("format", format);
+    const resp = await fetch(`${API_BASE}/analytics/branch/export?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    if (!resp.ok) {
+      dispatch(setAnalyticsError("Export failed. Please refresh and try again."));
+      return;
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `voxassist-analytics.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }, [authToken, buildParams, dispatch]);
 
   useEffect(() => {
     fetchAnalytics();
@@ -75,12 +119,13 @@ export function AnalyticsDashboard() {
           <h2 className="text-h1 font-semibold">Analytics Dashboard</h2>
           <p className="mt-1 text-sm text-on-surface-variant">Real-time branch demand, language mix, and escalation signals.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {/* Time Range Buttons */}
           {([
             ["today", "Today"],
             ["week", "This Week"],
             ["month", "This Month"],
+            ["year", "This Year"],
           ] as [TimeRange, string][]).map(([key, label]) => (
             <Button
               key={key}
@@ -91,6 +136,38 @@ export function AnalyticsDashboard() {
               {label}
             </Button>
           ))}
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(event) => {
+              setSelectedDate(event.target.value);
+              setTimeRange("custom_day");
+            }}
+            className="h-9 rounded border border-outline-variant bg-white px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            aria-label="Filter analytics by day"
+          />
+          <input
+            type="month"
+            value={selectedMonth}
+            onChange={(event) => {
+              setSelectedMonth(event.target.value);
+              setTimeRange("custom_month");
+            }}
+            className="h-9 rounded border border-outline-variant bg-white px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            aria-label="Filter analytics by month"
+          />
+          <input
+            type="number"
+            value={selectedYear}
+            onChange={(event) => {
+              setSelectedYear(event.target.value);
+              setTimeRange("custom_year");
+            }}
+            min="2020"
+            max="2100"
+            className="h-9 w-24 rounded border border-outline-variant bg-white px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+            aria-label="Filter analytics by year"
+          />
           <Button
             variant="outline"
             onClick={fetchAnalytics}
@@ -99,9 +176,13 @@ export function AnalyticsDashboard() {
             <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
             {refreshing ? "Refreshing…" : "Refresh"}
           </Button>
-          <Button>
+          <Button onClick={() => exportAnalytics("csv")} variant="outline">
             <Download className="h-4 w-4" />
-            Export
+            CSV
+          </Button>
+          <Button onClick={() => exportAnalytics("pdf")}>
+            <Download className="h-4 w-4" />
+            PDF
           </Button>
         </div>
       </div>

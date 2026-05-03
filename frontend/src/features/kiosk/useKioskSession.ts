@@ -51,6 +51,8 @@ interface KioskState {
   // Transcript State
   lastCustomerTranscriptNative: string | null;
   lastCustomerTranscriptEnglish: string | null;
+  lastStaffTranscriptEnglish: string | null;
+  lastStaffTranscriptNative: string | null;
   sopResult: SopResult | null;
 }
 
@@ -93,6 +95,8 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
     isComplete: false,
     lastCustomerTranscriptNative: null,
     lastCustomerTranscriptEnglish: null,
+    lastStaffTranscriptEnglish: null,
+    lastStaffTranscriptNative: null,
     sopResult: null,
   });
 
@@ -121,6 +125,7 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
   const isProcessingRef = useRef(false);
   const lastAssistantDurationRef = useRef(0);
   const assistantPlayStartRef = useRef(0);
+  const audioPlaybackQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const resumeListening = useCallback(() => {
     if (!sessionActiveRef.current) return;
@@ -128,13 +133,19 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
     pausedRef.current = false;
     if (usingSpeechRecognitionRef.current) {
       setState((prev) => ({ ...prev, isSpeaking: false, isListening: false }));
-      window.setTimeout(() => startRecognitionIfNeeded(), 1500);
+      window.setTimeout(() => startRecognitionIfNeeded(), 500);
     } else {
       setState((prev) => ({ ...prev, isSpeaking: false, isListening: false }));
     }
   }, []);
 
-  const playAudioBase64 = useCallback(async (audioB64: string | null | undefined, fallbackText = "", langCode?: string) => {
+  const playAudioBase64 = useCallback(async (
+    audioB64: string | null | undefined,
+    fallbackText = "",
+    langCode?: string,
+    options: { resumeAfter?: boolean } = {},
+  ) => {
+    const resumeAfter = options.resumeAfter ?? true;
     pausedRef.current = true;
     lastAssistantTextRef.current = fallbackText;
     assistantPlayStartRef.current = performance.now();
@@ -145,8 +156,8 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
       await speakWithBrowser(fallbackText, langCode || languageCodeRef.current);
       lastAssistantDurationRef.current = performance.now() - assistantPlayStartRef.current;
       lastSpeechEndedAtRef.current = performance.now();
-      await delay(1000);
-      resumeListening();
+      await delay(400);
+      if (resumeAfter) resumeListening();
       return;
     }
 
@@ -171,10 +182,21 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
     } finally {
       lastAssistantDurationRef.current = performance.now() - assistantPlayStartRef.current;
       lastSpeechEndedAtRef.current = performance.now();
-      await delay(1000);
-      resumeListening();
+      await delay(400);
+      if (resumeAfter) resumeListening();
     }
   }, [resumeListening]);
+
+  const enqueueAudio = useCallback((
+    audioB64: string | null | undefined,
+    fallbackText = "",
+    langCode?: string,
+    resumeAfter = true,
+  ) => {
+    audioPlaybackQueueRef.current = audioPlaybackQueueRef.current
+      .catch(() => {})
+      .then(() => playAudioBase64(audioB64, fallbackText, langCode, { resumeAfter }));
+  }, [playAudioBase64]);
 
   const handleMessage = useCallback((event: MessageEvent) => {
     const data = JSON.parse(event.data);
@@ -186,6 +208,8 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
             ...prev,
             lastCustomerTranscriptNative: data.item.originalText,
             lastCustomerTranscriptEnglish: data.item.translatedText,
+            lastStaffTranscriptEnglish: null,
+            lastStaffTranscriptNative: null,
           }));
           if (data.assistantResponse) {
             setState((prev) => ({
@@ -193,7 +217,15 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
               assistantText: data.assistantResponse,
               lastError: null,
             }));
-            void playAudioBase64(data.assistantAudio, data.assistantResponse, languageCodeRef.current);
+            if (data.assistantAudio) {
+              enqueueAudio(data.assistantAudio, data.assistantResponse, languageCodeRef.current);
+            } else if (data.assistantAudioPending) {
+              pausedRef.current = true;
+              recognitionRef.current?.stop();
+              setState((prev) => ({ ...prev, isSpeaking: true, isListening: false }));
+            } else {
+              enqueueAudio(null, data.assistantResponse, languageCodeRef.current);
+            }
           }
         } else if (data.item.speaker === "assistant") {
           setState((prev) => ({
@@ -201,8 +233,36 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
             assistantText: data.item.originalText,
             lastError: null,
           }));
-          void playAudioBase64(data.assistantAudio, data.item.originalText, languageCodeRef.current);
+          if (data.assistantAudio) {
+            enqueueAudio(data.assistantAudio, data.item.originalText, languageCodeRef.current);
+          } else if (data.assistantAudioPending) {
+            pausedRef.current = true;
+            recognitionRef.current?.stop();
+            setState((prev) => ({ ...prev, isSpeaking: true, isListening: false }));
+          } else {
+            enqueueAudio(null, data.item.originalText, languageCodeRef.current);
+          }
+        } else if (data.item.speaker === "staff") {
+          setState((prev) => ({
+            ...prev,
+            assistantText: data.item.translatedText || data.item.originalText,
+            lastStaffTranscriptEnglish: data.item.originalText,
+            lastStaffTranscriptNative: data.item.translatedText,
+            lastCustomerTranscriptNative: null,
+            lastCustomerTranscriptEnglish: null,
+            lastError: null,
+          }));
+          if (data.translatedAudioPending) {
+            pausedRef.current = true;
+            recognitionRef.current?.stop();
+            setState((prev) => ({ ...prev, isSpeaking: true, isListening: false }));
+          }
         }
+        break;
+
+      case "tts_audio":
+        if (data.audience === "staff") break;
+        enqueueAudio(data.audio_b64, data.text || "", languageCodeRef.current, data.isFinalChunk ?? true);
         break;
 
       case "language_detected":
@@ -228,8 +288,10 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
           // Clear previous transcript context when a new question is asked
           lastCustomerTranscriptNative: null,
           lastCustomerTranscriptEnglish: null,
+          lastStaffTranscriptEnglish: null,
+          lastStaffTranscriptNative: null,
         }));
-        void playAudioBase64(data.questionAudio, data.questionTranslated, languageCodeRef.current);
+        enqueueAudio(data.questionAudio, data.questionTranslated, languageCodeRef.current);
         break;
 
       case "form_field_filled":
@@ -244,8 +306,10 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
           // Clear previous transcript context when moving to the next question
           lastCustomerTranscriptNative: null,
           lastCustomerTranscriptEnglish: null,
+          lastStaffTranscriptEnglish: null,
+          lastStaffTranscriptNative: null,
         }));
-        void playAudioBase64(data.questionAudio, data.questionTranslated, languageCodeRef.current);
+        enqueueAudio(data.questionAudio, data.questionTranslated, languageCodeRef.current);
         break;
 
       case "form_complete":
@@ -257,7 +321,7 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
           questionTranslated: null,
           assistantText: data.completionTranslated || "Your form is complete.",
         }));
-        void playAudioBase64(data.completionAudio, data.completionTranslated || "Your form is complete.", languageCodeRef.current);
+        enqueueAudio(data.completionAudio, data.completionTranslated || "Your form is complete.", languageCodeRef.current);
         wsRef.current?.send(JSON.stringify({ type: "generate_form_pdf" }));
         break;
 
@@ -300,7 +364,7 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
         }
         break;
     }
-  }, [playAudioBase64, resumeListening]);
+  }, [enqueueAudio, resumeListening]);
 
   useEffect(() => {
     if (!sessionId || !authToken) {
@@ -447,7 +511,7 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
     recognitionRef.current = recognition;
     recognition.lang = languageCodeRef.current || "mr-IN";
     recognition.continuous = true;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
@@ -475,12 +539,27 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
     };
 
     recognition.onresult = (event) => {
-      let transcript = "";
+      let finalTranscript = "";
+      let interimTranscript = "";
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
         const result = event.results[index];
-        if (result?.isFinal) transcript += result[0]?.transcript ?? "";
+        const transcript = result?.[0]?.transcript ?? "";
+        if (result?.isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
       }
-      const text = transcript.trim();
+      const previewText = interimTranscript.trim();
+      if (previewText) {
+        setState((prev) => ({
+          ...prev,
+          lastCustomerTranscriptNative: previewText,
+          lastCustomerTranscriptEnglish: "",
+        }));
+      }
+
+      const text = finalTranscript.trim();
       if (!text) return;
       if (shouldIgnoreRecognizedText(text, lastAssistantTextRef.current, lastSpeechEndedAtRef.current)) {
         window.setTimeout(() => {
@@ -561,9 +640,9 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
     if (!analyser) return;
 
     const data = new Uint8Array(analyser.fftSize);
-    const silenceMs = 2000;
-    const minSpeechMs = 600;
-    const maxUtteranceMs = 30000;
+    const silenceMs = 750;
+    const minSpeechMs = 350;
+    const maxUtteranceMs = 24000;
     const threshold = 0.025;
 
     const tick = () => {
@@ -573,7 +652,7 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
       const rms = getRms(data);
       const now = performance.now();
       // Scale cooldown with assistant speech duration (minimum 2.2s)
-      const dynamicCooldown = Math.max(2200, Math.min(lastAssistantDurationRef.current * 0.3, 5000));
+      const dynamicCooldown = Math.max(900, Math.min(lastAssistantDurationRef.current * 0.25, 3000));
       const coolingDownFromAssistant = now - lastSpeechEndedAtRef.current < dynamicCooldown;
       const hasSpeech = !coolingDownFromAssistant && !isProcessingRef.current && rms > threshold;
 

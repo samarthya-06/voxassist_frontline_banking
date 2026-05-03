@@ -32,6 +32,9 @@ export function CustomerKiosk() {
   const isMarathi = kioskState.languageCode.startsWith("mr");
   const mainPrompt = kioskState.assistantText || (isMarathi ? "VoxAssist मध्ये आपले स्वागत आहे" : "Welcome to VoxAssist");
   const isLongPrompt = mainPrompt.length > 180;
+  const contextPrimary = kioskState.lastStaffTranscriptNative || kioskState.lastCustomerTranscriptNative;
+  const contextSecondary = kioskState.lastStaffTranscriptEnglish || kioskState.lastCustomerTranscriptEnglish;
+  const contextLabel = kioskState.lastStaffTranscriptNative ? "Staff" : "Customer";
   const subPrompt = kioskState.isSessionActive
     ? kioskState.isSpeaking
       ? isMarathi ? "कृपया ऐका" : "Please listen"
@@ -76,13 +79,16 @@ export function CustomerKiosk() {
       <main className="flex-grow flex flex-col items-center justify-center px-6 max-w-6xl mx-auto w-full text-center mt-20 mb-40 relative z-10">
         
         {/* Fading Transcript Context */}
-        <div className={`mb-12 transition-opacity duration-1000 ${kioskState.lastCustomerTranscriptNative ? 'opacity-40' : 'opacity-0'}`}>
+        <div className={`mb-12 transition-opacity duration-1000 ${contextPrimary ? 'opacity-60' : 'opacity-0'}`}>
           <div className="flex flex-col items-center">
+            <span className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-secondary">
+              {contextLabel}
+            </span>
             <span className="text-h2 text-secondary mb-1">
-              {kioskState.lastCustomerTranscriptNative || "..."}
+              {contextPrimary || "..."}
             </span>
             <span className="text-[13px] italic text-secondary">
-              ({kioskState.lastCustomerTranscriptEnglish || "..."})
+              ({contextSecondary || "..."})
             </span>
           </div>
         </div>

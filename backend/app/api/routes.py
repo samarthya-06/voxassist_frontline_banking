@@ -1,14 +1,16 @@
 """WebSocket + REST API routes for VoxAssist Frontline."""
 
+import asyncio
+import csv
 import io
 import json
 import os
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import StreamingResponse
 
-from .auth import decode_token_value
+from .auth import UserInfo, decode_token, decode_token_value
 from ..models.forms import get_all_form_types
 from ..services.ai_orchestrator import AIOrchestrator
 from ..services.repositories import repository
@@ -28,6 +30,164 @@ def _rag_query_from_payload(payload: dict) -> str:
         " ".join(payload.get("actionChips", []) or []),
     ]
     return " ".join(part for part in text_parts if part).strip()
+
+
+def _pop_deferred_tts(payload: dict) -> list[tuple[str, str | None, str]]:
+    """Remove internal async TTS fields before sending a transcript payload."""
+    tasks: list[tuple[str, str | None, str]] = []
+
+    text = payload.pop("assistantTtsText", None)
+    language_code = payload.pop("assistantTtsLanguageCode", None)
+    if text:
+        payload["assistantAudioPending"] = True
+        tasks.append((text, language_code, "all"))
+
+    translated_text = payload.pop("translatedSpeechText", None)
+    translated_language_code = payload.pop("translatedSpeechLanguageCode", None)
+    translated_audience = payload.pop("translatedSpeechAudience", "customer")
+    if translated_text:
+        payload["translatedAudioPending"] = True
+        tasks.append((translated_text, translated_language_code, translated_audience))
+
+    return tasks
+
+
+def _split_tts_text(text: str) -> list[str]:
+    """Split long assistant text so audio can start before the full answer is synthesized."""
+    import re
+
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?।])\s+", text) if part.strip()]
+    if not sentences:
+        return [text]
+
+    chunks: list[str] = []
+    current = ""
+    for sentence in sentences:
+        if current and len(current) + len(sentence) + 1 > 260:
+            chunks.append(current)
+            current = sentence
+        else:
+            current = f"{current} {sentence}".strip()
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+async def _send_deferred_tts(
+    session_id: str,
+    orchestrator: AIOrchestrator,
+    text: str,
+    language_code: str | None,
+    audience: str,
+) -> None:
+    """Generate TTS after the UI-visible transcript has already been sent."""
+    try:
+        chunks = _split_tts_text(text)
+        for index, chunk in enumerate(chunks):
+            message = await orchestrator.build_tts_audio_message(chunk, language_code)
+            message["audience"] = audience
+            message["chunkIndex"] = index
+            message["isFinalChunk"] = index == len(chunks) - 1
+            await manager.send_json(session_id, message)
+    except Exception:
+        # The transcript has already been delivered; losing delayed audio should
+        # not break the live session loop.
+        pass
+
+
+def _schedule_deferred_tts(
+    session_id: str,
+    orchestrator: AIOrchestrator,
+    tasks: list[tuple[str, str | None, str]],
+) -> None:
+    for text, language_code, audience in tasks:
+        asyncio.create_task(_send_deferred_tts(session_id, orchestrator, text, language_code, audience))
+
+
+def _csv_response(filename: str, rows: list[dict], fieldnames: list[str]) -> StreamingResponse:
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
+    content = io.BytesIO(buf.getvalue().encode("utf-8-sig"))
+    return StreamingResponse(
+        content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+def _flatten_session(record: dict) -> dict:
+    summary = record.get("summary", {})
+    entities = summary.get("entities", {})
+    return {
+        "session_id": record.get("session_id", ""),
+        "timestamp": record.get("timestamp", ""),
+        "customer": entities.get("customerName", ""),
+        "service": summary.get("service", ""),
+        "language": summary.get("language", ""),
+        "duration": summary.get("duration", ""),
+        "status": summary.get("status", ""),
+        "sentiment": summary.get("sentiment", ""),
+        "forms_filled": ", ".join(summary.get("formsFilled", []) or []),
+        "compliance_flags": summary.get("complianceFlags", 0),
+        "staff_username": summary.get("staffUsername", ""),
+        "desk_id": summary.get("deskId", ""),
+        "branch": summary.get("branch", ""),
+    }
+
+
+def _sessions_pdf_response(filename: str, title: str, records: list[dict]) -> StreamingResponse:
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas
+
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=landscape(A4))
+    width, height = landscape(A4)
+    y = height - 18 * mm
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(14 * mm, y, title)
+    c.setFont("Helvetica", 9)
+    c.drawRightString(width - 14 * mm, y, datetime.now().strftime("%Y-%m-%d %H:%M"))
+    y -= 10 * mm
+
+    headers = ["Session", "Customer", "Service", "Language", "Duration", "Status", "Flags"]
+    col_x = [14, 56, 98, 146, 184, 214, 252]
+    c.setFont("Helvetica-Bold", 8)
+    for x, header in zip(col_x, headers):
+        c.drawString(x * mm, y, header)
+    y -= 5 * mm
+    c.line(14 * mm, y, (width - 14 * mm), y)
+    y -= 5 * mm
+
+    c.setFont("Helvetica", 8)
+    for record in records:
+        if y < 18 * mm:
+            c.showPage()
+            y = height - 18 * mm
+            c.setFont("Helvetica", 8)
+        row = _flatten_session(record)
+        values = [
+            row["session_id"],
+            row["customer"] or "Unknown",
+            row["service"],
+            row["language"],
+            row["duration"],
+            row["status"],
+            str(row["compliance_flags"]),
+        ]
+        for x, value in zip(col_x, values):
+            c.drawString(x * mm, y, str(value)[:28])
+        y -= 6 * mm
+
+    c.save()
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 def get_devanagari_font_name() -> str:
@@ -76,7 +236,7 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
     current_mode = "customer"
 
     # Record session start
-    await repository.create_session(session_id, user.username, user.branch)
+    await repository.create_session(session_id, user.username, user.branch, user.deskId)
 
     try:
         await manager.connect(session_id, websocket)
@@ -105,6 +265,7 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
                 # Normal live session audio processing
                 payload = await orchestrator.process_audio_turn(message["bytes"], current_mode)
                 auto_start_form = payload.pop("autoStartForm", None)
+                tts_tasks = _pop_deferred_tts(payload)
 
                 # Persist transcript turn
                 if payload.get("item"):
@@ -118,8 +279,10 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
                         payload["item"]["translatedText"] = "[TRANSLATION BLOCKED: Compliance Violation]"
                         if "assistantAudio" in payload:
                             del payload["assistantAudio"]
+                        tts_tasks = []
                     
                     await manager.send_json(session_id, payload)
+                    _schedule_deferred_tts(session_id, orchestrator, tts_tasks)
                     await manager.send_json(session_id, {"type": "compliance", "alert": alert.model_dump() if alert else None})
 
                     # Audit trail for compliance
@@ -131,6 +294,7 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
                         )
                 else:
                     await manager.send_json(session_id, payload)
+                    _schedule_deferred_tts(session_id, orchestrator, tts_tasks)
                     await manager.send_json(session_id, {"type": "compliance", "alert": None})
 
                 # Send language detection if included
@@ -208,7 +372,9 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
                     "active": False,
                 })
                 greeting = await orchestrator.start_customer_session()
+                tts_tasks = _pop_deferred_tts(greeting)
                 await manager.send_json(session_id, greeting)
+                _schedule_deferred_tts(session_id, orchestrator, tts_tasks)
 
             elif kind == "demo_text":
                 # Explicit demo request (no real mic)
@@ -232,15 +398,28 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
                     sop_result = await orchestrator.search_sop(intent_query, result_language or "en-IN")
                     await manager.send_json(session_id, {"type": "sop", "result": sop_result.model_dump()})
 
-            elif kind == "customer_text":
-                current_mode = data.get("mode", "customer")
+            elif kind in {"customer_text", "staff_text", "text_turn"}:
+                current_mode = data.get("mode", "staff" if kind == "staff_text" else "customer")
                 payload = await orchestrator.process_text_turn(
                     data.get("text", ""),
                     current_mode,
                     data.get("languageCode"),
                 )
                 auto_start_form = payload.pop("autoStartForm", None)
+                tts_tasks = _pop_deferred_tts(payload)
+
+                if current_mode == "staff":
+                    alert = await orchestrator.check_compliance(payload["item"]["originalText"])
+                    if alert and alert.severity == "block":
+                        payload["item"]["translatedText"] = "[TRANSLATION BLOCKED: Compliance Violation]"
+                        tts_tasks = []
+                    await manager.send_json(session_id, payload)
+                    _schedule_deferred_tts(session_id, orchestrator, tts_tasks)
+                    await manager.send_json(session_id, {"type": "compliance", "alert": alert.model_dump() if alert else None})
+                    continue
+
                 await manager.send_json(session_id, payload)
+                _schedule_deferred_tts(session_id, orchestrator, tts_tasks)
                 await manager.send_json(session_id, {"type": "compliance", "alert": None})
 
                 if payload.get("actionChips"):
@@ -419,14 +598,75 @@ async def generate_receipt(session_id: str):
 
 # ── REST: All Sessions (History Tab) ─────────────────────────────────────────
 @router.get("/sessions")
-async def list_sessions():
+async def list_sessions(
+    range: str = Query("all"),
+    date: str = Query(""),
+    month: str = Query(""),
+    year: str = Query(""),
+    search: str = Query(""),
+    service: str = Query(""),
+    user: UserInfo = Depends(decode_token),
+):
     """Return all session records for the History tab."""
-    results = await repository.get_all_sessions()
+    results = await repository.get_session_records(
+        time_range=range,
+        date_value=date,
+        month_value=month,
+        year_value=year,
+        search=search,
+        service=service,
+    )
     return {"sessions": results}
 
 
+@router.get("/sessions/export")
+async def export_sessions(
+    format: str = Query("csv", pattern="^(csv|pdf)$"),
+    range: str = Query("all"),
+    date: str = Query(""),
+    month: str = Query(""),
+    year: str = Query(""),
+    search: str = Query(""),
+    service: str = Query(""),
+    user: UserInfo = Depends(decode_token),
+):
+    """Export filtered session history as CSV or PDF."""
+    records = await repository.get_session_records(
+        time_range=range,
+        date_value=date,
+        month_value=month,
+        year_value=year,
+        search=search,
+        service=service,
+        limit=1000,
+    )
+    filename_base = f"voxassist_sessions_{datetime.now().strftime('%Y%m%d_%H%M')}"
+    if format == "pdf":
+        return _sessions_pdf_response(f"{filename_base}.pdf", "VoxAssist Session History", records)
+    rows = [_flatten_session(record) for record in records]
+    return _csv_response(
+        f"{filename_base}.csv",
+        rows,
+        [
+            "session_id",
+            "timestamp",
+            "customer",
+            "service",
+            "language",
+            "duration",
+            "status",
+            "sentiment",
+            "forms_filled",
+            "compliance_flags",
+            "staff_username",
+            "desk_id",
+            "branch",
+        ],
+    )
+
+
 @router.get("/sessions/{session_id}")
-async def get_session(session_id: str):
+async def get_session(session_id: str, user: UserInfo = Depends(decode_token)):
     """Return a single session detail by ID."""
     doc = await repository.get_session_by_id(session_id)
     if not doc:
@@ -436,7 +676,7 @@ async def get_session(session_id: str):
 
 # ── REST: Customer History Lookup ────────────────────────────────────────────
 @router.get("/customer/history")
-async def customer_history(pan: str = "", name: str = ""):
+async def customer_history(pan: str = "", name: str = "", user: UserInfo = Depends(decode_token)):
     """Look up past session summaries by PAN or customer name."""
     results = await repository.get_customer_history(pan=pan, name=name)
     return {"sessions": results}
@@ -444,15 +684,53 @@ async def customer_history(pan: str = "", name: str = ""):
 
 # ── REST: Branch Analytics ───────────────────────────────────────────────────
 @router.get("/analytics/branch")
-async def branch_analytics(range: str = "all"):
+async def branch_analytics(
+    range: str = Query("all"),
+    date: str = Query(""),
+    month: str = Query(""),
+    year: str = Query(""),
+    user: UserInfo = Depends(decode_token),
+):
     """Return aggregated analytics for the branch."""
-    data = await repository.get_analytics(time_range=range)
+    data = await repository.get_analytics(time_range=range, date_value=date, month_value=month, year_value=year)
     return data
+
+
+@router.get("/analytics/branch/export")
+async def export_branch_analytics(
+    format: str = Query("csv", pattern="^(csv|pdf)$"),
+    range: str = Query("all"),
+    date: str = Query(""),
+    month: str = Query(""),
+    year: str = Query(""),
+    user: UserInfo = Depends(decode_token),
+):
+    """Export filtered branch analytics as CSV or PDF."""
+    analytics = await repository.get_analytics(time_range=range, date_value=date, month_value=month, year_value=year)
+    records = await repository.get_session_records(
+        time_range=range,
+        date_value=date,
+        month_value=month,
+        year_value=year,
+        limit=1000,
+    )
+    filename_base = f"voxassist_analytics_{datetime.now().strftime('%Y%m%d_%H%M')}"
+    if format == "pdf":
+        return _sessions_pdf_response(f"{filename_base}.pdf", "VoxAssist Branch Analytics", records)
+    rows = [
+        {"metric": "sessions", "value": analytics.get("sessions", 0)},
+        {"metric": "avg_handle_time", "value": analytics.get("avgHandleTime", "00:00")},
+        {"metric": "auto_fill_rate", "value": analytics.get("autoFillAccuracy", "0%")},
+        {"metric": "compliance_blocks", "value": analytics.get("complianceBlocks", 0)},
+    ]
+    rows.extend({"metric": f"service:{item['label']}", "value": item["value"]} for item in analytics.get("topServices", []))
+    rows.extend({"metric": f"language:{item['label']}", "value": item["value"]} for item in analytics.get("languages", []))
+    return _csv_response(f"{filename_base}.csv", rows, ["metric", "value"])
 
 
 # ── REST: Session Transcripts ────────────────────────────────────────────────
 @router.get("/sessions/{session_id}/transcripts")
-async def get_session_transcripts(session_id: str):
+async def get_session_transcripts(session_id: str, user: UserInfo = Depends(decode_token)):
     """Return all transcript turns for a session."""
     results = await repository.get_transcripts(session_id)
     return {"transcripts": results}

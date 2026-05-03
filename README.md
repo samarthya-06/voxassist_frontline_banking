@@ -76,6 +76,7 @@ RAG_TOP_K=5
 RAG_MIN_CONFIDENCE=0.18
 RAG_USE_LLM=false
 AI_FAST_MODE=true
+AI_ASYNC_TTS=true
 ```
 
 ## AWS Deployment

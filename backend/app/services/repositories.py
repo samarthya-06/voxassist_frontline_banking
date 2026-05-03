@@ -2,7 +2,7 @@
 
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from pymongo.errors import PyMongoError, ServerSelectionTimeoutError
 
@@ -34,8 +34,8 @@ class SessionRepository:
             await self._seed_demo_users()
             logger.info("MongoDB database '%s' is ready", settings.mongodb_db)
 
-        # Always seed demo sessions into in-memory so History + Analytics work
-        self._seed_demo_sessions()
+        if settings.seed_demo_data:
+            self._seed_demo_sessions()
 
     async def _seed_demo_users(self) -> None:
         users = [
@@ -45,6 +45,57 @@ class SessionRepository:
                 "role": "staff",
                 "name": "Priya Sharma",
                 "branch": "Central District",
+                "desk_id": "FD-01",
+                "system_id": "FRONTLINE-DESK-01",
+                "employee_id": "104851",
+                "active": True,
+                "updatedAt": datetime.now().isoformat(),
+            },
+            {
+                "username": "staff2",
+                "password": "staff123",
+                "role": "staff",
+                "name": "Rohan Mehta",
+                "branch": "Central District",
+                "desk_id": "FD-02",
+                "system_id": "FRONTLINE-DESK-02",
+                "employee_id": "104852",
+                "active": True,
+                "updatedAt": datetime.now().isoformat(),
+            },
+            {
+                "username": "staff3",
+                "password": "staff123",
+                "role": "staff",
+                "name": "Neha Iyer",
+                "branch": "Central District",
+                "desk_id": "FD-03",
+                "system_id": "FRONTLINE-DESK-03",
+                "employee_id": "104853",
+                "active": True,
+                "updatedAt": datetime.now().isoformat(),
+            },
+            {
+                "username": "staff4",
+                "password": "staff123",
+                "role": "staff",
+                "name": "Amit Kulkarni",
+                "branch": "Central District",
+                "desk_id": "FD-04",
+                "system_id": "FRONTLINE-DESK-04",
+                "employee_id": "104854",
+                "active": True,
+                "updatedAt": datetime.now().isoformat(),
+            },
+            {
+                "username": "staff5",
+                "password": "staff123",
+                "role": "staff",
+                "name": "Farah Khan",
+                "branch": "Central District",
+                "desk_id": "FD-05",
+                "system_id": "FRONTLINE-DESK-05",
+                "employee_id": "104855",
                 "active": True,
                 "updatedAt": datetime.now().isoformat(),
             },
@@ -349,7 +400,10 @@ class SessionRepository:
     async def get_user(self, username: str) -> dict | None:
         """Return a user from MongoDB, or None when MongoDB is unavailable."""
         try:
-            user = await self.db.users.find_one({"username": username, "active": True})
+            user = await self.db.users.find_one({
+                "$or": [{"username": username}, {"employee_id": username}],
+                "active": True,
+            })
             if user:
                 user.pop("_id", None)
             return user
@@ -384,100 +438,354 @@ class SessionRepository:
             pass
         return self.memory.get(session_id, {}).get("summary")
 
-    # ── Get All Sessions (for History tab) ───────────────────────────────────
-    async def get_all_sessions(self) -> list[dict]:
-        """Return all session records, merging MongoDB + in-memory, ordered by timestamp descending."""
-        seen_ids: set[str] = set()
-        results: list[dict] = []
-
-        # Try MongoDB first
+    # ── Session Records / History / Analytics ───────────────────────────────
+    def _parse_timestamp(self, value: str | None) -> datetime | None:
+        if not value:
+            return None
         try:
-            cursor = self.db.session_summaries.find({}).sort("timestamp", -1).limit(50)
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            return None
+
+    def _range_bounds(
+        self,
+        time_range: str = "all",
+        date_value: str = "",
+        month_value: str = "",
+        year_value: str = "",
+    ) -> tuple[datetime | None, datetime | None]:
+        now = datetime.now()
+        if date_value:
+            try:
+                selected = date.fromisoformat(date_value)
+                start = datetime.combine(selected, time.min)
+                return start, start + timedelta(days=1)
+            except ValueError:
+                pass
+        if month_value:
+            try:
+                start = datetime.strptime(month_value, "%Y-%m")
+                end = datetime(start.year + (1 if start.month == 12 else 0), 1 if start.month == 12 else start.month + 1, 1)
+                return start, end
+            except ValueError:
+                pass
+        if year_value:
+            try:
+                year = int(year_value)
+                return datetime(year, 1, 1), datetime(year + 1, 1, 1)
+            except ValueError:
+                pass
+        if time_range == "today":
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            return start, start + timedelta(days=1)
+        if time_range == "week":
+            start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+            return start, start + timedelta(days=7)
+        if time_range == "month":
+            start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            end = datetime(start.year + (1 if start.month == 12 else 0), 1 if start.month == 12 else start.month + 1, 1)
+            return start, end
+        if time_range == "year":
+            return datetime(now.year, 1, 1), datetime(now.year + 1, 1, 1)
+        return None, None
+
+    def _in_bounds(self, timestamp: str, start: datetime | None, end: datetime | None) -> bool:
+        parsed = self._parse_timestamp(timestamp)
+        if parsed is None:
+            return True if start is None and end is None else False
+        if start and parsed < start:
+            return False
+        if end and parsed >= end:
+            return False
+        return True
+
+    def _seconds_to_mmss(self, seconds: int) -> str:
+        safe_seconds = max(0, seconds)
+        return f"{safe_seconds // 60:02d}:{safe_seconds % 60:02d}"
+
+    def _duration_to_seconds(self, duration: str | None) -> int:
+        if not duration or ":" not in duration:
+            return 0
+        parts = duration.split(":")
+        try:
+            return int(parts[0]) * 60 + int(parts[1])
+        except (ValueError, IndexError):
+            return 0
+
+    def _infer_language(self, transcripts: list[dict], fallback: str = "Unknown") -> str:
+        for item in transcripts:
+            if item.get("speaker") == "customer" and item.get("sourceLanguage"):
+                return item["sourceLanguage"]
+        return fallback
+
+    def _infer_service(self, summary: dict, transcripts: list[dict], forms: list[dict]) -> str:
+        if summary.get("service"):
+            return summary["service"]
+        if forms:
+            return forms[0].get("form_title") or forms[0].get("form_type", "Form")
+        text = " ".join(
+            f"{item.get('originalText', '')} {item.get('translatedText', '')}"
+            for item in transcripts
+        ).lower()
+        service_keywords = [
+            ("Fixed Deposit Enquiry", ("fixed deposit", "fd", "deposit", "व्याज")),
+            ("Account Opening", ("open account", "account opening", "savings account", "खाते")),
+            ("KYC Update", ("kyc", "aadhaar", "pan", "address update")),
+            ("Card Support", ("card", "debit", "credit", "pin", "block")),
+            ("Loan Enquiry", ("loan", "home loan", "personal loan", "कर्ज")),
+            ("NEFT Transfer Help", ("neft", "rtgs", "imps", "transfer")),
+            ("Locker Enquiry", ("locker", "safe deposit")),
+        ]
+        for label, keywords in service_keywords:
+            if any(keyword in text for keyword in keywords):
+                return label
+        return "General Service"
+
+    def _merge_entities(self, summary: dict, transcripts: list[dict]) -> dict:
+        entities = {
+            "customerName": "",
+            "pan": "",
+            "phone": "",
+            "accountType": "",
+            "product": "",
+            "amount": "",
+            "cardLast4": "",
+        }
+        entities.update(summary.get("entities") or {})
+        for item in transcripts:
+            text = f"{item.get('originalText', '')} {item.get('translatedText', '')}"
+            if not entities["customerName"]:
+                # Keep this intentionally conservative; detailed extraction still
+                # happens in the orchestrator during live calls.
+                lowered = text.lower()
+                if "my name is" in lowered:
+                    entities["customerName"] = text[lowered.index("my name is") + 11:].split(".")[0].strip()[:60]
+        return entities
+
+    def _normalize_session_record(
+        self,
+        session_id: str,
+        summary_doc: dict | None,
+        meta_doc: dict | None,
+        transcripts: list[dict],
+        forms: list[dict],
+        compliance_events: list[dict],
+    ) -> dict:
+        summary = (summary_doc or {}).get("summary", {}) if summary_doc else {}
+        timestamp = (
+            (summary_doc or {}).get("timestamp")
+            or (meta_doc or {}).get("started_at")
+            or datetime.now().isoformat()
+        )
+        duration = summary.get("duration")
+        duration_seconds = int((meta_doc or {}).get("duration_seconds") or 0)
+        if not duration:
+            duration = self._seconds_to_mmss(duration_seconds)
+
+        status = summary.get("status")
+        if not status:
+            status = "Escalated" if compliance_events else ("Completed" if (meta_doc or {}).get("status") == "completed" else "Active")
+
+        language = summary.get("language") or (meta_doc or {}).get("customer_language") or self._infer_language(transcripts)
+        forms_filled = summary.get("formsFilled")
+        if forms_filled is None:
+            forms_filled = [item.get("form_title") or item.get("form_type", "Form") for item in forms if item.get("is_complete")]
+
+        english = summary.get("english")
+        if english is None:
+            english = [
+                f"{item.get('speaker', 'speaker').title()}: {item.get('translatedText') or item.get('originalText')}"
+                for item in transcripts[-8:]
+            ]
+        customer_language = summary.get("customerLanguage")
+        if customer_language is None:
+            customer_language = [
+                f"{item.get('speaker', 'speaker').title()}: {item.get('originalText')}"
+                for item in transcripts[-8:]
+            ]
+
+        normalized_summary = {
+            "type": "summary",
+            "service": self._infer_service(summary, transcripts, forms),
+            "status": status,
+            "language": language,
+            "duration": duration,
+            "sentiment": summary.get("sentiment") or ("negative" if status == "Escalated" else "neutral"),
+            "entities": self._merge_entities(summary, transcripts),
+            "english": english,
+            "customerLanguage": customer_language,
+            "formsFilled": forms_filled,
+            "complianceFlags": summary.get("complianceFlags", len(compliance_events)),
+            "staffUsername": (meta_doc or {}).get("staff_username", ""),
+            "deskId": (meta_doc or {}).get("desk_id", ""),
+            "branch": (meta_doc or {}).get("branch", ""),
+        }
+        return {
+            "session_id": session_id,
+            "timestamp": timestamp,
+            "summary": normalized_summary,
+        }
+
+    async def get_session_records(
+        self,
+        time_range: str = "all",
+        date_value: str = "",
+        month_value: str = "",
+        year_value: str = "",
+        search: str = "",
+        service: str = "",
+        staff_username: str = "",
+        limit: int = 200,
+    ) -> list[dict]:
+        """Return session records derived from real summaries, sessions, transcripts, forms, and compliance events."""
+        seen_ids: set[str] = set()
+        summary_docs: dict[str, dict] = {}
+        meta_docs: dict[str, dict] = {}
+        transcript_docs: dict[str, list[dict]] = {}
+        form_docs: dict[str, list[dict]] = {}
+        compliance_docs: dict[str, list[dict]] = {}
+
+        try:
+            cursor = self.db.session_summaries.find({}).sort("timestamp", -1).limit(limit)
             async for doc in cursor:
                 doc.pop("_id", None)
                 sid = doc.get("session_id", "")
-                if sid not in seen_ids:
-                    seen_ids.add(sid)
-                    results.append(doc)
+                if sid:
+                    summary_docs[sid] = doc
+
+            cursor = self.db.sessions.find({}).sort("started_at", -1).limit(limit)
+            async for doc in cursor:
+                doc.pop("_id", None)
+                sid = doc.get("session_id", "")
+                if sid:
+                    meta_docs[sid] = doc
+
+            session_ids = list(set(summary_docs) | set(meta_docs))
+            if session_ids:
+                cursor = self.db.transcripts.find({"session_id": {"$in": session_ids}}).sort("timestamp", 1)
+                async for doc in cursor:
+                    doc.pop("_id", None)
+                    transcript_docs.setdefault(doc.get("session_id", ""), []).append(doc)
+
+                cursor = self.db.form_submissions.find({"session_id": {"$in": session_ids}})
+                async for doc in cursor:
+                    doc.pop("_id", None)
+                    form_docs.setdefault(doc.get("session_id", ""), []).append(doc)
+
+                cursor = self.db.compliance_events.find({"session_id": {"$in": session_ids}})
+                async for doc in cursor:
+                    doc.pop("_id", None)
+                    compliance_docs.setdefault(doc.get("session_id", ""), []).append(doc)
         except (PyMongoError, ServerSelectionTimeoutError):
             pass
 
-        # Always merge in-memory sessions (includes demo seeds)
+        for sid, doc in self.memory.items():
+            if doc.get("summary"):
+                summary_docs.setdefault(sid, doc)
+        for sid, doc in self.session_meta_memory.items():
+            meta_docs.setdefault(sid, doc)
+        for sid, docs in self.transcript_memory.items():
+            transcript_docs.setdefault(sid, docs)
+        for doc in self.form_memory:
+            form_docs.setdefault(doc.get("session_id", ""), []).append(doc)
+        for doc in self.compliance_memory:
+            compliance_docs.setdefault(doc.get("session_id", ""), []).append(doc)
         for doc in self.history_memory:
             sid = doc.get("session_id", "")
-            if sid not in seen_ids:
-                seen_ids.add(sid)
-                results.append(doc)
+            if sid:
+                summary_docs.setdefault(sid, doc)
 
-        # Sort by timestamp descending
+        results: list[dict] = []
+        for sid in set(summary_docs) | set(meta_docs) | set(transcript_docs):
+            if not sid or sid in seen_ids:
+                continue
+            seen_ids.add(sid)
+            record = self._normalize_session_record(
+                sid,
+                summary_docs.get(sid),
+                meta_docs.get(sid),
+                transcript_docs.get(sid, []),
+                form_docs.get(sid, []),
+                compliance_docs.get(sid, []),
+            )
+            results.append(record)
+
         results.sort(key=lambda d: d.get("timestamp", ""), reverse=True)
-        return results
+        start, end = self._range_bounds(time_range, date_value, month_value, year_value)
+        lowered_search = search.lower().strip()
+        filtered: list[dict] = []
+        for record in results:
+            summary = record.get("summary", {})
+            if not self._in_bounds(record.get("timestamp", ""), start, end):
+                continue
+            if service and service != "all" and summary.get("service") != service:
+                continue
+            if staff_username and summary.get("staffUsername") != staff_username:
+                continue
+            if lowered_search:
+                haystack = " ".join([
+                    record.get("session_id", ""),
+                    summary.get("service", ""),
+                    summary.get("language", ""),
+                    summary.get("entities", {}).get("customerName", ""),
+                    summary.get("entities", {}).get("pan", ""),
+                    summary.get("entities", {}).get("phone", ""),
+                ]).lower()
+                if lowered_search not in haystack:
+                    continue
+            filtered.append(record)
+        return filtered[:limit]
+
+    # ── Get All Sessions (for History tab) ───────────────────────────────────
+    async def get_all_sessions(self) -> list[dict]:
+        """Return all session records ordered by timestamp descending."""
+        return await self.get_session_records()
 
     # ── Get Single Session by ID ─────────────────────────────────────────────
     async def get_session_by_id(self, session_id: str) -> dict | None:
         """Return a single session record by session_id."""
-        try:
-            doc = await self.db.session_summaries.find_one({"session_id": session_id})
-            if doc:
-                doc.pop("_id", None)
-                return doc
-        except (PyMongoError, ServerSelectionTimeoutError):
-            pass
-
-        # Fallback to in-memory
-        return self.memory.get(session_id)
+        records = await self.get_session_records(limit=500)
+        for record in records:
+            if record.get("session_id") == session_id:
+                return record
+        return None
 
     # ── Customer History Lookup ──────────────────────────────────────────────
     async def get_customer_history(self, pan: str = "", name: str = "") -> list[dict]:
+        records = await self.get_session_records(limit=200)
+        lowered_name = name.lower().strip()
+        normalized_pan = pan.upper().strip()
         results: list[dict] = []
-        try:
-            query: dict = {}
-            if pan:
-                query["summary.entities.pan"] = pan
-            if name:
-                query["summary.entities.customerName"] = {"$regex": name, "$options": "i"}
-            if not query:
-                query = {}
-
-            cursor = self.db.session_summaries.find(query).sort("timestamp", -1).limit(20)
-            async for doc in cursor:
-                doc.pop("_id", None)
-                results.append(doc)
-        except (PyMongoError, ServerSelectionTimeoutError):
-            # Fallback to in-memory history
-            for doc in reversed(self.history_memory):
-                results.append(doc)
-        return results
+        for record in records:
+            entities = record.get("summary", {}).get("entities", {})
+            if normalized_pan and entities.get("pan", "").upper() != normalized_pan:
+                continue
+            if lowered_name and lowered_name not in entities.get("customerName", "").lower():
+                continue
+            results.append(record)
+        return results[:20]
 
     # ── Branch Analytics ─────────────────────────────────────────────────────
-    async def get_analytics(self, time_range: str = "all") -> dict:
+    async def get_analytics(
+        self,
+        time_range: str = "all",
+        date_value: str = "",
+        month_value: str = "",
+        year_value: str = "",
+    ) -> dict:
         """Return aggregated analytics computed from real session data."""
-        # Gather all sessions and filter by time range
-        all_sessions = await self.get_all_sessions()
-
-        if time_range != "all":
-            now = datetime.now()
-            if time_range == "today":
-                cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            elif time_range == "week":
-                cutoff = now - timedelta(days=7)
-            elif time_range == "month":
-                cutoff = now - timedelta(days=30)
-            else:
-                cutoff = None
-            if cutoff:
-                cutoff_iso = cutoff.isoformat()
-                all_sessions = [s for s in all_sessions if s.get("timestamp", "") >= cutoff_iso]
+        all_sessions = await self.get_session_records(
+            time_range=time_range,
+            date_value=date_value,
+            month_value=month_value,
+            year_value=year_value,
+        )
 
         if not all_sessions:
-            # Absolute fallback when zero sessions exist
             return {
                 "topServices": [],
                 "languages": [],
-                "alerts": [
-                    {"customer": "Counter 3", "reason": "Repeated negative keywords", "sentiment": "High frustration"},
-                    {"customer": "Counter 7", "reason": "Compliance phrase blocked", "sentiment": "Medium risk"},
-                ],
+                "alerts": [],
                 "sessions": 0,
                 "avgHandleTime": "00:00",
                 "autoFillAccuracy": "0%",
@@ -489,8 +797,7 @@ class SessionRepository:
         language_counts: dict[str, int] = {}
         total_seconds = 0
         duration_count = 0
-        forms_filled_count = 0
-        total_forms_possible = 0
+        sessions_with_forms = 0
         compliance_blocks = 0
 
         for doc in all_sessions:
@@ -505,16 +812,13 @@ class SessionRepository:
             language_counts[language] = language_counts.get(language, 0) + 1
 
             if duration_str and ":" in duration_str:
-                parts = duration_str.split(":")
-                try:
-                    total_seconds += int(parts[0]) * 60 + int(parts[1])
+                seconds = self._duration_to_seconds(duration_str)
+                if seconds:
+                    total_seconds += seconds
                     duration_count += 1
-                except (ValueError, IndexError):
-                    pass
 
             if forms:
-                forms_filled_count += len(forms)
-            total_forms_possible += 1
+                sessions_with_forms += 1
             compliance_blocks += flags
 
         # Format service bars (as percentage of total sessions)
@@ -536,8 +840,8 @@ class SessionRepository:
         avg_mm = str(avg_seconds // 60).zfill(2)
         avg_ss = str(avg_seconds % 60).zfill(2)
 
-        # Auto-fill accuracy: percentage of sessions that had forms filled
-        accuracy = round((forms_filled_count / total_forms_possible) * 100) if total_forms_possible else 0
+        # Auto-fill rate: percentage of sessions that had at least one completed form.
+        accuracy = round((sessions_with_forms / total) * 100) if total else 0
 
         # Escalation alerts from sessions with negative sentiment
         alerts = []
@@ -545,13 +849,13 @@ class SessionRepository:
             summary = doc.get("summary", {})
             if summary.get("sentiment") == "negative":
                 alerts.append({
-                    "customer": f"Counter {i + 1}",
+                    "customer": summary.get("entities", {}).get("customerName") or doc.get("session_id", f"Session {i + 1}"),
                     "reason": summary.get("english", ["Negative sentiment detected"])[0] if summary.get("english") else "Negative sentiment detected",
                     "sentiment": "High frustration",
                 })
             elif summary.get("complianceFlags", 0) > 0:
                 alerts.append({
-                    "customer": f"Counter {i + 1}",
+                    "customer": summary.get("entities", {}).get("customerName") or doc.get("session_id", f"Session {i + 1}"),
                     "reason": "Compliance flag triggered during session",
                     "sentiment": "Medium risk",
                 })
@@ -593,11 +897,24 @@ class SessionRepository:
         return None
 
     # ── Session Lifecycle ─────────────────────────────────────────────────────
-    async def create_session(self, session_id: str, staff_username: str, branch: str) -> None:
+    async def create_session(self, session_id: str, staff_username: str, branch: str, desk_id: str | None = None) -> None:
         """Record that a new live session has started."""
+        existing = self.session_meta_memory.get(session_id)
+        if existing and existing.get("status") == "active":
+            return
+        try:
+            existing_db = await self.db.sessions.find_one({"session_id": session_id, "status": "active"})
+            if existing_db:
+                existing_db.pop("_id", None)
+                self.session_meta_memory[session_id] = existing_db
+                return
+        except (PyMongoError, ServerSelectionTimeoutError):
+            pass
+
         doc = {
             "session_id": session_id,
             "staff_username": staff_username,
+            "desk_id": desk_id or "",
             "branch": branch,
             "status": "active",
             "started_at": datetime.now().isoformat(),

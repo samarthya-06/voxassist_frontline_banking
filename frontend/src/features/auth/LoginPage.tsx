@@ -7,6 +7,8 @@ type AuthUser = {
   role: "staff" | "manager";
   name: string;
   branch: string;
+  username?: string;
+  deskId?: string | null;
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
@@ -27,8 +29,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     setError("");
     setLoading(true);
 
-    // Map employee ID to demo username if needed
-    const username = employeeId === "104859" ? "staff1" : employeeId === "200100" ? "manager1" : employeeId;
+    const username = employeeId.trim();
 
     try {
       const resp = await fetch(`${API_BASE}/auth/login`, {
@@ -46,14 +47,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
       const user = await resp.json();
       onLogin(user as AuthUser);
-    } catch {
-      // Backend not running — allow demo bypass via the role tab
-      onLogin({
-        token: "demo",
-        role: activeTab,
-        name: activeTab === "staff" ? "Priya Sharma" : "Anil Deshmukh",
-        branch: "Central District",
-      });
+    } catch (err: any) {
+      setError(err.message || "Network error: Unable to connect to the backend.");
     }
     setLoading(false);
   };
@@ -124,7 +119,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 autoFocus
                 value={employeeId}
                 onChange={(e) => setEmployeeId(e.target.value)}
-                placeholder={activeTab === "staff" ? "e.g. staff1" : "e.g. manager1"}
+                placeholder={activeTab === "staff" ? "staff1-staff5 or 104851-104855" : "manager1 or 200100"}
                 className="h-8 w-full rounded border border-outline-variant bg-surface-container-lowest px-2 text-[13px] leading-[18px] text-on-surface outline-none placeholder:text-outline-variant focus:border-primary focus:ring-1 focus:ring-primary"
               />
             </div>

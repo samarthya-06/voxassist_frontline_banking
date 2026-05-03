@@ -62,7 +62,11 @@ function formatTimestamp(iso: string): string {
   }
 }
 
-export function ComplianceDashboard() {
+type ComplianceDashboardProps = {
+  authToken: string;
+};
+
+export function ComplianceDashboard({ authToken }: ComplianceDashboardProps) {
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -72,7 +76,9 @@ export function ComplianceDashboard() {
     let cancelled = false;
     setLoading(true);
 
-    fetch(`${API_BASE}/sessions`)
+    fetch(`${API_BASE}/sessions`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    })
       .then((resp) => (resp.ok ? resp.json() : Promise.reject(resp)))
       .then((data: { sessions?: SessionRecord[] }) => {
         if (!cancelled) {
@@ -89,7 +95,7 @@ export function ComplianceDashboard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authToken]);
 
   // ONLY show sessions with compliance flags
   const complianceSessions = sessions.filter((s) => (s.summary.complianceFlags ?? 0) > 0);
