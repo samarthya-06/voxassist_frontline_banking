@@ -21,6 +21,7 @@ type View = "session" | "summary" | "analytics" | "history" | "compliance" | "te
 type AppShellProps = {
   activeView: View;
   onViewChange: (view: View) => void;
+  onLogout?: () => void;
   children: React.ReactNode;
 };
 
@@ -50,7 +51,7 @@ function useCallTimer() {
   return `${mm}:${ss}`;
 }
 
-export function AppShell({ activeView, onViewChange, children }: AppShellProps) {
+export function AppShell({ activeView, onViewChange, onLogout, children }: AppShellProps) {
   const timer = useCallTimer();
   const language = useAppSelector((state) => state.session.language);
   const escalationAlert = useAppSelector((state) => state.session.escalationAlert);
@@ -128,7 +129,10 @@ export function AppShell({ activeView, onViewChange, children }: AppShellProps) 
           <HelpCircle className="h-4 w-4" />
           Support
         </button>
-        <button className="flex h-11 w-full items-center gap-3 px-6 text-xs font-medium uppercase text-slate-600 hover:bg-slate-100">
+        <button 
+          onClick={onLogout}
+          className="flex h-11 w-full items-center gap-3 px-6 text-xs font-medium uppercase text-slate-600 hover:bg-slate-100"
+        >
           <LogOut className="h-4 w-4" />
           Logout
         </button>

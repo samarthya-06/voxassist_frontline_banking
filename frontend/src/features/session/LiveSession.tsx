@@ -198,19 +198,21 @@ export function LiveSession({ authToken, sessionId, onEndSession }: LiveSessionP
         ══════════════════════════════════════════════════════════════════ */}
           <section className="flex flex-1 min-w-0 flex-col rounded-xl border border-outline-variant bg-surface shadow-md overflow-hidden">
             <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-outline-variant bg-surface-bright px-4">
-              <h2 className="text-[16px] font-semibold leading-5 text-on-surface whitespace-nowrap">Live Transcript</h2>
-              <div className="flex items-center gap-2 ml-4 flex-1 max-w-[200px] sm:max-w-xs">
-                 <UserRound className="h-4 w-4 text-outline shrink-0" />
-                 <input 
-                   type="text"
-                   placeholder="Assign Customer Name..."
-                   value={customerName}
-                   onChange={(e) => setCustomerName(e.target.value)}
-                   onBlur={() => updateSessionMetadata({ customerName })}
-                   className="flex-1 min-w-0 rounded border border-transparent bg-surface-container-low px-2 py-1 text-[13px] font-medium text-on-surface outline-none focus:border-primary focus:bg-surface transition-colors"
-                 />
+              <div className="flex items-center gap-4 min-w-0">
+                <h2 className="text-[16px] font-semibold leading-5 text-on-surface whitespace-nowrap hidden sm:block">Live Transcript</h2>
+                <div className="flex items-center gap-2 max-w-[160px] sm:max-w-[200px]">
+                   <UserRound className="h-4 w-4 text-outline shrink-0" />
+                   <input 
+                     type="text"
+                     placeholder="Assign Name..."
+                     value={customerName}
+                     onChange={(e) => setCustomerName(e.target.value)}
+                     onBlur={() => updateSessionMetadata({ customerName })}
+                     className="w-full min-w-0 rounded border border-transparent bg-surface-container-low px-2 py-1 text-[13px] font-medium text-on-surface outline-none focus:border-primary focus:bg-surface transition-colors"
+                   />
+                </div>
               </div>
-              <div className="flex items-center gap-2 ml-auto">
+              <div className="flex items-center gap-2 shrink-0">
                 <a
                   href={`/kiosk?session=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(authToken)}`}
                   target="_blank"

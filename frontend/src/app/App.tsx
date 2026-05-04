@@ -20,7 +20,10 @@ type AuthUser = {
 };
 
 export function App() {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    const saved = sessionStorage.getItem("voxassist_user");
+    return saved ? JSON.parse(saved) : null;
+  });
   const [activeView, setActiveView] = useState<View>("session");
   const [activeSessionId, setActiveSessionId] = useState(() => `session-${Date.now()}`);
   const [lastSessionId, setLastSessionId] = useState(activeSessionId);
@@ -30,9 +33,19 @@ export function App() {
     return <CustomerKiosk />;
   }
 
+  const handleLogin = (newUser: AuthUser) => {
+    sessionStorage.setItem("voxassist_user", JSON.stringify(newUser));
+    setUser(newUser);
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem("voxassist_user");
+    setUser(null);
+  };
+
   // ── Auth gate ──
   if (!user) {
-    return <LoginPage onLogin={setUser} />;
+    return <LoginPage onLogin={handleLogin} />;
   }
 
   const handleViewChange = (view: View) => {
@@ -45,7 +58,7 @@ export function App() {
   };
 
   return (
-    <AppShell activeView={activeView} onViewChange={handleViewChange}>
+    <AppShell activeView={activeView} onViewChange={handleViewChange} onLogout={handleLogout}>
       {activeView === "session" && (
         <LiveSession
           authToken={user.token}
