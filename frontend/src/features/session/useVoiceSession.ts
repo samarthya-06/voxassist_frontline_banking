@@ -438,6 +438,10 @@ export function useVoiceSession(authToken?: string, sessionId = "demo-session") 
     sendSelectedLanguage();
   }
 
+  function updateSessionMetadata(metadata: { customerName?: string }) {
+    wsRef.current?.send(JSON.stringify({ type: "update_metadata", ...metadata }));
+  }
+
   // ── Form Interview Functions ──────────────────────────────────────────
   function startFormInterviewWs(formType: string) {
     wsRef.current?.send(JSON.stringify({ type: "start_form", formType }));
@@ -458,6 +462,7 @@ export function useVoiceSession(authToken?: string, sessionId = "demo-session") 
     requestSummary,
     searchSop,
     setLanguage,
+    updateSessionMetadata,
     waveformCanvasRef,
     startFormInterview: startFormInterviewWs,
     cancelFormInterview: cancelFormInterviewWs,

@@ -343,6 +343,10 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
                     "code": lang_info["code"],
                 })
 
+            elif kind == "update_metadata":
+                customer_name = data.get("customerName", "")
+                await repository.update_session_metadata(session_id, {"customer_name": customer_name})
+
             elif kind == "start":
                 # Just acknowledges recording started — no demo turn
                 await manager.send_json(session_id, {
@@ -400,10 +404,21 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
 
             elif kind in {"customer_text", "staff_text", "text_turn"}:
                 current_mode = data.get("mode", "staff" if kind == "staff_text" else "customer")
+                language_code = data.get("languageCode")
+
+                if orchestrator.form_session and not orchestrator.form_session.is_complete:
+                    payload = await orchestrator.process_form_text_turn(
+                        data.get("text", ""),
+                        current_mode,
+                        language_code,
+                    )
+                    await manager.send_json(session_id, payload)
+                    continue
+
                 payload = await orchestrator.process_text_turn(
                     data.get("text", ""),
                     current_mode,
-                    data.get("languageCode"),
+                    language_code,
                 )
                 auto_start_form = payload.pop("autoStartForm", None)
                 tts_tasks = _pop_deferred_tts(payload)
@@ -483,6 +498,14 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
             await repository.end_session(session_id)
             disconnected_orchestrator = orchestrators.pop(session_id, None)
             if disconnected_orchestrator:
+                # Auto-generate and save summary if there's transcript history
+                if disconnected_orchestrator.transcript_history:
+                    try:
+                        summary = await disconnected_orchestrator.summarize()
+                        await repository.save_summary(session_id, summary)
+                    except Exception as e:
+                        print(f"Error generating automatic summary for {session_id}: {e}")
+
                 # Persist form submission if a form was completed
                 if disconnected_orchestrator.form_session and disconnected_orchestrator.form_session.is_complete:
                     fs = disconnected_orchestrator.form_session

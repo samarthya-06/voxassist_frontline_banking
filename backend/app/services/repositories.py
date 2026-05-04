@@ -620,6 +620,11 @@ class SessionRepository:
             "deskId": (meta_doc or {}).get("desk_id", ""),
             "branch": (meta_doc or {}).get("branch", ""),
         }
+        
+        # Override customerName if staff explicitly set it in metadata
+        if meta_doc and meta_doc.get("customer_name"):
+            normalized_summary["entities"]["customerName"] = meta_doc["customer_name"]
+
         return {
             "session_id": session_id,
             "timestamp": timestamp,
@@ -928,6 +933,16 @@ class SessionRepository:
         try:
             await self.db.sessions.update_one(
                 {"session_id": session_id}, {"$set": doc}, upsert=True
+            )
+        except (PyMongoError, ServerSelectionTimeoutError):
+            pass
+
+    async def update_session_metadata(self, session_id: str, updates: dict) -> None:
+        if session_id in self.session_meta_memory:
+            self.session_meta_memory[session_id].update(updates)
+        try:
+            await self.db.sessions.update_one(
+                {"session_id": session_id}, {"$set": updates}
             )
         except (PyMongoError, ServerSelectionTimeoutError):
             pass

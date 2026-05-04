@@ -1432,6 +1432,122 @@ class AIOrchestrator:
             "questionAudio": audio_b64,
         }
 
+    async def process_form_text_turn(self, text: str, mode: str, language_code: str | None = None) -> dict:
+        """Text fallback version of process_form_audio_turn. Used when kiosk relies on Web Speech API."""
+        if not self.form_session or self.form_session.is_complete:
+            return {"type": "error", "message": "No active form session"}
+
+        definition = FORMS[self.form_session.form_type]
+        current_field = definition.field_at(self.form_session.current_field_index)
+        if not current_field:
+            return {"type": "error", "message": "Form already fully answered"}
+
+        if not text.strip():
+            # No text provided — ask again
+            retry_text = f"I didn't catch that. {current_field.question}"
+            lang_code = self.detected_language_code or language_code or "hi-IN"
+            if lang_code != "en-IN":
+                retry_translated = await self._call_sarvam_translate(retry_text, "en-IN", lang_code)
+            else:
+                retry_translated = retry_text
+            audio_b64 = await self._call_sarvam_tts(retry_translated, lang_code)
+            return {
+                "type": "form_retry",
+                "formState": self.form_session.to_dict(),
+                "currentField": {
+                    "key": current_field.key,
+                    "label": current_field.label,
+                    "fieldType": current_field.field_type,
+                    "options": current_field.options,
+                },
+                "questionText": retry_text,
+                "questionTranslated": retry_translated,
+                "questionAudio": audio_b64,
+            }
+
+        native_text = text
+        source_code = language_code or self.detected_language_code or "hi-IN"
+
+        # 3. Translate to English for entity extraction
+        if source_code != "en-IN":
+            english_text = await self._call_sarvam_translate(native_text, source_code, "en-IN")
+        else:
+            english_text = native_text
+
+        # 4. Extract the specific field value from the English answer
+        extracted_value = await self._extract_form_field(
+            english_text, current_field.key, current_field.label,
+            current_field.validation_hint, current_field.options
+        )
+
+        # 5. Fill the field
+        self.form_session.filled_fields[current_field.key] = extracted_value
+        filled_field_key = current_field.key
+        filled_field_label = current_field.label
+
+        # 6. Advance to next field
+        self.form_session.current_field_index += 1
+        next_field = definition.field_at(self.form_session.current_field_index)
+
+        if next_field is None:
+            # All fields filled!
+            self.form_session.is_complete = True
+            completion_text = (
+                f"All fields are filled. Your {definition.title} form is now complete. "
+                "The staff can review and download the PDF."
+            )
+            lang_code = self.detected_language_code or language_code or "hi-IN"
+            if lang_code != "en-IN":
+                completion_translated = await self._call_sarvam_translate(
+                    completion_text, "en-IN", lang_code
+                )
+            else:
+                completion_translated = completion_text
+            audio_b64 = await self._call_sarvam_tts(completion_translated, lang_code)
+
+            return {
+                "type": "form_complete",
+                "formState": self.form_session.to_dict(),
+                "filledFieldKey": filled_field_key,
+                "filledFieldLabel": filled_field_label,
+                "filledFieldValue": extracted_value,
+                "nativeAnswer": native_text,
+                "englishAnswer": english_text,
+                "completionText": completion_text,
+                "completionTranslated": completion_translated,
+                "completionAudio": audio_b64,
+            }
+
+        # Build confirmation + next question
+        confirmation = f"Got it. "
+        next_question = f"{confirmation}{next_field.question}"
+        lang_code = self.detected_language_code or language_code or "hi-IN"
+        if lang_code != "en-IN":
+            next_translated = await self._call_sarvam_translate(next_question, "en-IN", lang_code)
+        else:
+            next_translated = next_question
+
+        audio_b64 = await self._call_sarvam_tts(next_translated, lang_code)
+
+        return {
+            "type": "form_field_filled",
+            "formState": self.form_session.to_dict(),
+            "filledFieldKey": filled_field_key,
+            "filledFieldLabel": filled_field_label,
+            "filledFieldValue": extracted_value,
+            "nativeAnswer": native_text,
+            "englishAnswer": english_text,
+            "currentField": {
+                "key": next_field.key,
+                "label": next_field.label,
+                "fieldType": next_field.field_type,
+                "options": next_field.options,
+            },
+            "questionText": next_field.question,
+            "questionTranslated": next_translated,
+            "questionAudio": audio_b64,
+        }
+
     async def _extract_form_field(
         self,
         text: str,

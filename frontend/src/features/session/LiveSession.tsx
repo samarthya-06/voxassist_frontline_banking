@@ -93,6 +93,7 @@ export function LiveSession({ authToken, sessionId, onEndSession }: LiveSessionP
     replayLast,
     searchSop,
     setLanguage,
+    updateSessionMetadata,
     waveformCanvasRef,
     startFormInterview,
     cancelFormInterview,
@@ -101,6 +102,7 @@ export function LiveSession({ authToken, sessionId, onEndSession }: LiveSessionP
   const [sopExpanded, setSopExpanded] = useState(true);
   const [sopQuery, setSopQuery] = useState("");
   const [formSuggestion, setFormSuggestion] = useState<FormSuggestion | null>(null);
+  const [customerName, setCustomerName] = useState("");
   const suggestedFormsRef = useRef<Set<string>>(new Set());
 
   const toggleRecording = () => {
@@ -196,13 +198,24 @@ export function LiveSession({ authToken, sessionId, onEndSession }: LiveSessionP
         ══════════════════════════════════════════════════════════════════ */}
           <section className="flex flex-1 min-w-0 flex-col rounded-xl border border-outline-variant bg-surface shadow-md overflow-hidden">
             <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-outline-variant bg-surface-bright px-4">
-              <h2 className="text-[16px] font-semibold leading-5 text-on-surface">Live Transcript</h2>
-              <div className="flex items-center gap-2">
+              <h2 className="text-[16px] font-semibold leading-5 text-on-surface whitespace-nowrap">Live Transcript</h2>
+              <div className="flex items-center gap-2 ml-4 flex-1 max-w-[200px] sm:max-w-xs">
+                 <UserRound className="h-4 w-4 text-outline shrink-0" />
+                 <input 
+                   type="text"
+                   placeholder="Assign Customer Name..."
+                   value={customerName}
+                   onChange={(e) => setCustomerName(e.target.value)}
+                   onBlur={() => updateSessionMetadata({ customerName })}
+                   className="flex-1 min-w-0 rounded border border-transparent bg-surface-container-low px-2 py-1 text-[13px] font-medium text-on-surface outline-none focus:border-primary focus:bg-surface transition-colors"
+                 />
+              </div>
+              <div className="flex items-center gap-2 ml-auto">
                 <a
                   href={`/kiosk?session=${encodeURIComponent(sessionId)}&token=${encodeURIComponent(authToken)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="rounded border border-outline-variant bg-white px-2 py-1 text-[11px] font-semibold text-primary hover:bg-surface-container-low"
+                  className="rounded border border-outline-variant bg-white px-2 py-1 text-[11px] font-semibold text-primary hover:bg-surface-container-low whitespace-nowrap"
                 >
                   Customer Screen
                 </a>
