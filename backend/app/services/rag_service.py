@@ -44,12 +44,15 @@ class BankingRagService:
 
         generated = ""
         if llm:
-            generated = await self._generate_answer(query, matches, language_code, llm)
+            # Force LLM to reason and generate in English to ensure quality
+            generated = await self._generate_answer(query, matches, "en-IN", llm)
 
         if not generated:
             generated = self._fallback_answer(matches)
-            if translate and language_code != "en-IN":
-                generated = await translate(generated, "en-IN", language_code)
+            
+        # Explicitly translate the generated or fallback English text
+        if translate and language_code != "en-IN" and generated:
+            generated = await translate(generated, "en-IN", language_code)
 
         top = matches[0]
         citations = [_citation(match) for match in matches]
