@@ -40,12 +40,58 @@ type SessionSummaryProps = {
 };
 
 export function SessionSummary({ authToken, sessionId }: SessionSummaryProps) {
-  const summary = useAppSelector((state) => state.session.bilingualSummary);
-  const entities = useAppSelector((state) => state.session.entities);
+  const reduxSummary = useAppSelector((state) => state.session.bilingualSummary);
+  const reduxEntities = useAppSelector((state) => state.session.entities);
   const language = useAppSelector((state) => state.session.language);
+
+  const [localSummary, setLocalSummary] = useState(reduxSummary);
+  const [localEntities, setLocalEntities] = useState(reduxEntities);
+  const [fetchingSession, setFetchingSession] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
 
+  // 1. Sync with Redux if available
+  useEffect(() => {
+    if (reduxSummary.english.length > 0) {
+      setLocalSummary(reduxSummary);
+      setLocalEntities(reduxEntities);
+    }
+  }, [reduxSummary, reduxEntities]);
+
+  // 2. Fetch from backend if Redux is empty (e.g. after manual session reset)
+  useEffect(() => {
+    if (reduxSummary.english.length > 0 || !sessionId) return;
+
+    let cancelled = false;
+    setFetchingSession(true);
+
+    fetch(`${API_BASE}/sessions/${encodeURIComponent(sessionId)}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    })
+      .then((resp) => (resp.ok ? resp.json() : Promise.reject(resp)))
+      .then((data) => {
+        if (cancelled) return;
+        if (data.summary) {
+          setLocalSummary({
+            english: data.summary.english ?? [],
+            customerLanguage: data.summary.customerLanguage ?? [],
+          });
+          setLocalEntities(data.summary.entities ?? {});
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to fetch session details:", err);
+      })
+      .finally(() => {
+        if (!cancelled) setFetchingSession(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, authToken, reduxSummary.english.length]);
+
+  // 3. Fetch history
   useEffect(() => {
     let cancelled = false;
 
@@ -77,13 +123,16 @@ export function SessionSummary({ authToken, sessionId }: SessionSummaryProps) {
   const downloadPdf = async () => {
     setDownloading(true);
     try {
-      const resp = await fetch(`${API_BASE}/session/${encodeURIComponent(sessionId)}/receipt`, { method: "POST" });
+      const resp = await fetch(`${API_BASE}/session/${encodeURIComponent(sessionId)}/receipt`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
       if (resp.ok) {
         const blob = await resp.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = "session_receipt.pdf";
+        a.download = `receipt_${sessionId}.pdf`;
         a.click();
         URL.revokeObjectURL(url);
       }
@@ -121,24 +170,34 @@ export function SessionSummary({ authToken, sessionId }: SessionSummaryProps) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Current Interaction Summary</CardTitle>
-            <Badge tone="green">Ready for records</Badge>
+            {fetchingSession ? (
+              <Badge tone="slate">Loading summary...</Badge>
+            ) : (
+              <Badge tone="green">Ready for records</Badge>
+            )}
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
             <div className="rounded border border-outline-variant p-4">
               <div className="mb-3 text-caps uppercase text-outline">English Record</div>
               <ul className="list-disc space-y-2 pl-4 text-sm text-on-surface-variant">
-                {summary.english.map((item) => (
-                  <li key={item}>{item}</li>
+                {localSummary.english.map((item, idx) => (
+                  <li key={idx}>{item}</li>
                 ))}
               </ul>
+              {localSummary.english.length === 0 && !fetchingSession && (
+                <div className="text-xs text-outline italic">No English summary available.</div>
+              )}
             </div>
             <div className="rounded border border-outline-variant p-4">
               <div className="mb-3 text-caps uppercase text-outline">Customer Copy ({language})</div>
               <ul className="list-disc space-y-2 pl-4 text-sm text-on-surface-variant">
-                {summary.customerLanguage.map((item) => (
-                  <li key={item}>{item}</li>
+                {localSummary.customerLanguage.map((item, idx) => (
+                  <li key={idx}>{item}</li>
                 ))}
               </ul>
+              {localSummary.customerLanguage.length === 0 && !fetchingSession && (
+                <div className="text-xs text-outline italic">No customer language summary available.</div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -151,13 +210,16 @@ export function SessionSummary({ authToken, sessionId }: SessionSummaryProps) {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-3 text-sm">
-                {Object.entries(entities).map(([key, value]) =>
+                {Object.entries(localEntities).map(([key, value]) =>
                   value ? (
                     <div key={key} className="space-y-0.5">
                       <div className="text-caps uppercase text-outline">{key.replace(/([A-Z])/g, " $1")}</div>
                       <div className="font-medium text-on-surface">{value}</div>
                     </div>
                   ) : null
+                )}
+                {!fetchingSession && Object.values(localEntities).every(v => !v) && (
+                  <div className="col-span-2 text-xs text-outline italic">No entities extracted.</div>
                 )}
               </div>
             </CardContent>
