@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Mic,
   MicOff,
+  LogOut,
   PhoneOff,
   Quote,
   ReceiptText,
@@ -19,23 +20,11 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
+import { CUSTOMER_LANGUAGES } from "../../config/languages";
 import { cn } from "../../shared/lib/utils";
 import { FormInterview } from "./FormInterview";
 import { setListenMode, setMuted, resetSession } from "./sessionSlice";
 import { useVoiceSession } from "./useVoiceSession";
-
-const CUSTOMER_LANGUAGES = [
-  { language: "Marathi", code: "mr-IN" },
-  { language: "Hindi", code: "hi-IN" },
-  { language: "English", code: "en-IN" },
-  { language: "Gujarati", code: "gu-IN" },
-  { language: "Kannada", code: "kn-IN" },
-  { language: "Tamil", code: "ta-IN" },
-  { language: "Telugu", code: "te-IN" },
-  { language: "Bengali", code: "bn-IN" },
-  { language: "Malayalam", code: "ml-IN" },
-  { language: "Punjabi", code: "pa-IN" },
-];
 
 const LOW_CONFIDENCE_THRESHOLD = 0.75;
 
@@ -82,9 +71,10 @@ type LiveSessionProps = {
   authToken: string;
   sessionId: string;
   onEndSession?: () => void;
+  onLogout?: () => void;
 };
 
-export function LiveSession({ authToken, sessionId, onEndSession }: LiveSessionProps) {
+export function LiveSession({ authToken, sessionId, onEndSession, onLogout }: LiveSessionProps) {
   const dispatch = useAppDispatch();
   const session = useAppSelector((state) => state.session);
   const {
@@ -102,33 +92,26 @@ export function LiveSession({ authToken, sessionId, onEndSession }: LiveSessionP
   const [sopExpanded, setSopExpanded] = useState(true);
   const [sopQuery, setSopQuery] = useState("");
   const [formSuggestion, setFormSuggestion] = useState<FormSuggestion | null>(null);
-  const [customerName, setCustomerName] = useState("");
   const suggestedFormsRef = useRef<Set<string>>(new Set());
+  const syncedCustomerNameRef = useRef("");
 
   const toggleRecording = () => {
     if (session.isRecording) stopRecording(session.listenMode);
     else startRecording(session.listenMode);
   };
 
-  // ── Spacebar Push-to-Talk shortcut ──
+  // ── Spacebar shortcut mirrors the click-on/click-off voice button ──
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space" && !e.repeat && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
         e.preventDefault();
-        if (!session.isRecording) startRecording(session.listenMode);
-      }
-    };
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === "Space" && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
-        e.preventDefault();
         if (session.isRecording) stopRecording(session.listenMode);
+        else startRecording(session.listenMode);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
     };
   }, [session.isRecording, session.listenMode, startRecording, stopRecording]);
 
@@ -160,6 +143,13 @@ export function LiveSession({ authToken, sessionId, onEndSession }: LiveSessionP
     });
   }, [session.actionChips, session.formInterview.active, session.transcript]);
 
+  useEffect(() => {
+    const name = session.entities.customerName.trim();
+    if (name === syncedCustomerNameRef.current) return;
+    syncedCustomerNameRef.current = name;
+    updateSessionMetadata({ customerName: name });
+  }, [session.entities.customerName]);
+
   const isComplianceBlock = session.complianceAlert?.severity === "block";
   const reRecord = (speaker: "customer" | "staff") => {
     dispatch(setListenMode(speaker));
@@ -186,6 +176,32 @@ export function LiveSession({ authToken, sessionId, onEndSession }: LiveSessionP
     onEndSession?.();
   };
 
+  const handleLogout = () => {
+    if (session.isRecording) stopRecording(session.listenMode);
+    dispatch(resetSession());
+    onLogout?.();
+  };
+
+  const formTypeFromAction = (label: string) => {
+    const lower = label.toLowerCase();
+    if (!lower.includes("start")) return null;
+    if (lower.includes("kyc")) return "kyc";
+    if (lower.includes("account")) return "account_opening";
+    if (lower.includes("fixed") || lower.includes("fd")) return "fd_application";
+    if (lower.includes("loan")) return "loan_application";
+    if (lower.includes("card")) return "card_application";
+    return null;
+  };
+
+  const handleActionChip = (chip: string) => {
+    const formType = formTypeFromAction(chip);
+    if (formType) {
+      startFormInterview(formType);
+      return;
+    }
+    searchSop(chip);
+  };
+
   return (
     <>
       {/* ── 3-column workspace ── */}
@@ -200,17 +216,6 @@ export function LiveSession({ authToken, sessionId, onEndSession }: LiveSessionP
             <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-outline-variant bg-surface-bright px-4">
               <div className="flex items-center gap-4 min-w-0">
                 <h2 className="text-[16px] font-semibold leading-5 text-on-surface whitespace-nowrap hidden sm:block">Live Transcript</h2>
-                <div className="flex items-center gap-2 max-w-[160px] sm:max-w-[200px]">
-                   <UserRound className="h-4 w-4 text-outline shrink-0" />
-                   <input 
-                     type="text"
-                     placeholder="Assign Name..."
-                     value={customerName}
-                     onChange={(e) => setCustomerName(e.target.value)}
-                     onBlur={() => updateSessionMetadata({ customerName })}
-                     className="w-full min-w-0 rounded border border-transparent bg-surface-container-low px-2 py-1 text-[13px] font-medium text-on-surface outline-none focus:border-primary focus:bg-surface transition-colors"
-                   />
-                </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <a
@@ -365,7 +370,7 @@ export function LiveSession({ authToken, sessionId, onEndSession }: LiveSessionP
                     {session.actionChips.map((chip, index) => (
                       <button
                         key={chip}
-                        onClick={() => searchSop(chip)}
+                        onClick={() => handleActionChip(chip)}
                         className={cn(
                           "flex min-h-10 flex-1 basis-[160px] items-center justify-center gap-2 rounded px-3 py-2 text-[14px] font-medium transition-colors",
                           index === 0
@@ -540,7 +545,7 @@ export function LiveSession({ authToken, sessionId, onEndSession }: LiveSessionP
       {/* ══════════════════════════════════════════════════════════════════
           BOTTOM BAR: Push-to-Talk controls
       ══════════════════════════════════════════════════════════════════ */}
-      <footer className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-center gap-8 border-t border-slate-200 bg-white px-10 py-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+      <footer className="staff-control-footer fixed bottom-0 left-0 right-0 z-50 flex items-center justify-center gap-8 border-t border-slate-200 bg-white px-10 py-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
         <button
           aria-label={session.isMuted ? "Unmute" : "Mute"}
           onClick={toggleMute}
@@ -616,7 +621,7 @@ export function LiveSession({ authToken, sessionId, onEndSession }: LiveSessionP
           />
           <Mic className="relative z-10 mb-1 h-7 w-7" />
           <span className="relative z-10">
-            {session.isMuted ? "Muted" : session.isRecording ? `Recording ${session.listenMode}...` : "Push-to-Talk"}
+            {session.isMuted ? "Muted" : session.isRecording ? `Listening ${session.listenMode}...` : "Start Listening"}
           </span>
         </button>
 
@@ -627,6 +632,15 @@ export function LiveSession({ authToken, sessionId, onEndSession }: LiveSessionP
         >
           <PhoneOff className="mb-1 h-6 w-6" />
           End Session
+        </button>
+
+        <button
+          aria-label="Logout"
+          onClick={handleLogout}
+          className="flex flex-col items-center justify-center rounded-lg px-6 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-600 transition-all hover:bg-slate-100 hover:text-blue-900 active:scale-95"
+        >
+          <LogOut className="mb-1 h-6 w-6" />
+          Logout
         </button>
       </footer>
 

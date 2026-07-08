@@ -1,13 +1,24 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.auth import auth_router
+from .api.health_router import router as health_router
 from .api.routes import router
 from .core.config import settings
 from .db.connection import close_client
 from .services.repositories import repository
 
-app = FastAPI(title="VoxAssist Frontline API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await repository.ensure_database()
+    yield
+    await close_client()
+
+
+app = FastAPI(title="VoxAssist Frontline API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,18 +30,4 @@ app.add_middleware(
 
 app.include_router(router)
 app.include_router(auth_router)
-
-
-@app.on_event("startup")
-async def startup() -> None:
-    await repository.ensure_database()
-
-
-@app.on_event("shutdown")
-async def shutdown() -> None:
-    await close_client()
-
-
-@app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+app.include_router(health_router)

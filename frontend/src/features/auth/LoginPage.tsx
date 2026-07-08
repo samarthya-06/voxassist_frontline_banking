@@ -1,5 +1,6 @@
 import { Lock, ShieldCheck } from "lucide-react";
 import { useState } from "react";
+import { API_BASE } from "../../config/env";
 import { cn } from "../../shared/lib/utils";
 
 type AuthUser = {
@@ -10,8 +11,6 @@ type AuthUser = {
   username?: string;
   deskId?: string | null;
 };
-
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 
 type LoginPageProps = {
   onLogin: (user: AuthUser) => void;

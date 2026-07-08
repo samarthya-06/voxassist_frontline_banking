@@ -29,7 +29,16 @@ class BankingRagService:
         llm: LlmFn | None = None,
         translate: TranslateFn | None = None,
     ) -> SopResult:
-        matches = await sop_store.retrieve(query, branch_id=branch_id, top_k=settings.rag_top_k)
+        retrieval_query = query
+        if translate and language_code != "en-IN":
+            try:
+                translated_query = await translate(query, language_code, "en-IN")
+                if translated_query and translated_query != query:
+                    retrieval_query = translated_query
+            except Exception as exc:
+                logger.warning("RAG query translation failed; using original query: %s", exc)
+
+        matches = await sop_store.retrieve(retrieval_query, branch_id=branch_id, top_k=settings.rag_top_k)
         if not matches or matches[0].score < settings.rag_min_confidence:
             answer = "I could not find an approved bank policy for this query. Please check the latest approved circular or CBS rule before advising the customer."
             if translate and language_code != "en-IN":
@@ -43,18 +52,23 @@ class BankingRagService:
             )
 
         generated = ""
-        if llm:
+        low_confidence = matches[0].score < 0.36
+        if llm and not low_confidence:
             # Force LLM to reason and generate in English to ensure quality
-            generated = await self._generate_answer(query, matches, "en-IN", llm)
+            generated = await self._generate_answer(retrieval_query, matches, "en-IN", llm)
 
         if not generated:
             generated = self._fallback_answer(matches)
+
+        if low_confidence:
+            generated = f"Staff verification required: {generated}"
             
         # Explicitly translate the generated or fallback English text
         if translate and language_code != "en-IN" and generated:
             generated = await translate(generated, "en-IN", language_code)
 
         top = matches[0]
+        dated_match = next((match for match in matches if match.chunk.effective_from or match.chunk.effective_to), top)
         citations = [_citation(match) for match in matches]
         return SopResult(
             title=top.chunk.title,
@@ -62,10 +76,10 @@ class BankingRagService:
             source=top.chunk.source,
             citations=citations,
             confidence=round(top.score, 3),
-            effectiveFrom=top.chunk.effective_from,
-            effectiveTo=top.chunk.effective_to,
-            branchId=_display_branch(top.chunk.branch_ids),
-            requiresStaffVerification=top.score < 0.36,
+            effectiveFrom=top.chunk.effective_from or dated_match.chunk.effective_from,
+            effectiveTo=top.chunk.effective_to or dated_match.chunk.effective_to,
+            branchId=_display_branch(top.chunk.branch_ids) or _display_branch(dated_match.chunk.branch_ids),
+            requiresStaffVerification=low_confidence,
         )
 
     async def _generate_answer(self, query: str, matches: list[RankedChunk], language_code: str, llm: LlmFn) -> str:

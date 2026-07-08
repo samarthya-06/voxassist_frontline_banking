@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAppSelector } from "../../app/hooks";
+import { API_BASE } from "../../config/env";
 import { cn } from "../../shared/lib/utils";
 
 // ── Icon mapping for form types ─────────────────────────────────────────────
@@ -272,7 +273,7 @@ export function FormInterview({ onStartForm, onCancelForm, onGeneratePdf, isReco
           {/* PDF actions */}
           {form.pdfReady && form.pdfUrl ? (
             <a
-              href={`${import.meta.env.VITE_VOXASSIST_API_URL ?? "http://localhost:8000"}${form.pdfUrl}`}
+              href={`${API_BASE}${form.pdfUrl}`}
               target="_blank"
               rel="noopener noreferrer"
               className={cn(

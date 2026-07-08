@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
+import { buildSessionWsUrl } from "../../config/env";
 import {
   addTranscript,
   cancelFormInterview,
@@ -9,6 +10,7 @@ import {
   setConnectionStatus,
   setDetectedLanguage,
   setEscalationAlert,
+  setListenMode,
   setFormComplete,
   setFormPdfReady,
   setRecording,
@@ -35,6 +37,7 @@ type ServerMessage =
     assistantAudioPending?: boolean;
   }
   | { type: "sop"; result: SopResult }
+  | { type: "asr_status"; mode: "customer" | "staff"; status: string; message: string }
   | { type: "compliance"; alert: ComplianceAlert | null }
   | { type: "summary"; english: string[]; customerLanguage: string[] }
   | { type: "language_detected"; language: string; code: string }
@@ -87,19 +90,8 @@ type ServerMessage =
   | { type: "form_cancelled" }
   | { type: "form_error"; message: string };
 
-const WS_URL = import.meta.env.VITE_VOXASSIST_WS_URL ?? "ws://localhost:8000/ws/session/demo-session";
-
 function buildWsUrl(authToken?: string, sessionId = "demo-session") {
-  const baseWsUrl = WS_URL.includes("demo-session") ? WS_URL.replace("demo-session", sessionId) : WS_URL;
-  if (!authToken) return baseWsUrl;
-  try {
-    const url = new URL(baseWsUrl);
-    url.searchParams.set("token", authToken);
-    return url.toString();
-  } catch {
-    const separator = baseWsUrl.includes("?") ? "&" : "?";
-    return `${baseWsUrl}${separator}token=${encodeURIComponent(authToken)}`;
-  }
+  return buildSessionWsUrl(sessionId, authToken);
 }
 
 export function useVoiceSession(authToken?: string, sessionId = "demo-session") {
@@ -110,6 +102,13 @@ export function useVoiceSession(authToken?: string, sessionId = "demo-session") 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const continuousAudioRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const vadFrameRef = useRef<number | null>(null);
+  const recordingUtteranceRef = useRef(false);
+  const speechStartedAtRef = useRef(0);
+  const lastSpeechAtRef = useRef(0);
+  const sendingUtteranceRef = useRef(false);
   const modeRef = useRef<"customer" | "staff">("customer");
   const waveformCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const waveformAudioRef = useRef<AudioContext | null>(null);
@@ -119,7 +118,8 @@ export function useVoiceSession(authToken?: string, sessionId = "demo-session") 
   const shouldReconnectRef = useRef(true);
   const selectedLanguageRef = useRef({ language: selectedLanguage, code: selectedLanguageCode });
   const audioPlaybackQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const recordingAutoStopTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const assistantAudioActiveRef = useRef(false);
+  const assistantAudioEndedAtRef = useRef(0);
 
   useEffect(() => {
     selectedLanguageRef.current = { language: selectedLanguage, code: selectedLanguageCode };
@@ -128,7 +128,15 @@ export function useVoiceSession(authToken?: string, sessionId = "demo-session") 
   const enqueueAudio = useCallback((audioB64: string) => {
     audioPlaybackQueueRef.current = audioPlaybackQueueRef.current
       .catch(() => { })
-      .then(() => playAudioBase64Async(audioB64));
+      .then(async () => {
+        assistantAudioActiveRef.current = true;
+        try {
+          await playAudioBase64Async(audioB64);
+        } finally {
+          assistantAudioEndedAtRef.current = performance.now();
+          assistantAudioActiveRef.current = false;
+        }
+      });
   }, []);
 
   const handleMessage = useCallback((event: MessageEvent) => {
@@ -160,6 +168,9 @@ export function useVoiceSession(authToken?: string, sessionId = "demo-session") 
 
       case "sop":
         dispatch(setSopResult(data.result));
+        break;
+
+      case "asr_status":
         break;
 
       case "compliance":
@@ -324,100 +335,152 @@ export function useVoiceSession(authToken?: string, sessionId = "demo-session") 
         wsRef.current.close();
       }
       stopWaveform();
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-      if (recordingAutoStopTimerRef.current) window.clearTimeout(recordingAutoStopTimerRef.current);
+      stopRecording(modeRef.current);
     };
   }, [authToken, dispatch, handleMessage, sendSelectedLanguage, sessionId, stopWaveform]);
 
   /**
-   * Start recording. Audio is buffered locally and sent as one
-   * complete blob when stopRecording() is called.
+   * Start click-on listening. Voice activity splits speech into utterances,
+   * sends each utterance after silence, and keeps the mic active until stopped.
    */
   async function startRecording(mode: "customer" | "staff") {
-    console.log("startRecording called with mode:", mode);
+    if (streamRef.current) return;
     modeRef.current = mode;
     chunksRef.current = [];
 
     if (!navigator.mediaDevices?.getUserMedia) {
-      console.warn("navigator.mediaDevices.getUserMedia not supported, using demo mode");
-      // No mic — send a single demo turn
-      wsRef.current?.send(JSON.stringify({ type: "demo_text", mode }));
-      dispatch(setRecording(true));
+      dispatch(setRecording(false));
       return;
     }
 
     try {
-      console.log("Requesting microphone access...");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      console.log("Microphone access granted.");
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       streamRef.current = stream;
       startWaveform(stream);
 
-      const recorder = new MediaRecorder(stream);
-      recorderRef.current = recorder;
+      const audioCtx = new AudioContext();
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 1024;
+      audioCtx.createMediaStreamSource(stream).connect(analyser);
+      continuousAudioRef.current = audioCtx;
+      analyserRef.current = analyser;
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      // When recording stops, combine all chunks and send once
-      recorder.onstop = async () => {
-        console.log("Recording stopped. Processing audio chunks...");
-        if (recordingAutoStopTimerRef.current) window.clearTimeout(recordingAutoStopTimerRef.current);
-        recordingAutoStopTimerRef.current = null;
-        stopWaveform();
-        stream.getTracks().forEach((t) => t.stop());
-
-        if (chunksRef.current.length === 0) {
-          console.warn("No audio chunks recorded.");
-          return;
-        }
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType });
-        console.log("Recorded blob size:", blob.size, "mime:", recorder.mimeType);
-
-        // Convert to WAV for Sarvam compatibility
-        const wavBytes = await blobToWav(blob);
-        console.log("Converted to WAV, size:", wavBytes.byteLength);
-
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-          console.log("Sending audio to server...");
-          // Tell backend which mode this audio belongs to
-          wsRef.current.send(JSON.stringify({ type: "audio_meta", mode: modeRef.current }));
-          wsRef.current.send(wavBytes);
-        } else {
-          console.error("WebSocket is not open. ReadyState:", wsRef.current?.readyState);
-        }
-      };
-
-      recorder.start();          // record the full segment, no timeslice
-      recordingAutoStopTimerRef.current = window.setTimeout(() => {
-        if (recorder.state !== "inactive") {
-          recorder.stop();
-          dispatch(setRecording(false));
-        }
-      }, 24000);
-      console.log("MediaRecorder started.");
       dispatch(setRecording(true));
       wsRef.current?.send(JSON.stringify({ type: "start", mode }));
+      runVadLoop();
     } catch (err) {
       console.error("Mic permission denied or error:", err);
-      // Mic permission denied — single demo turn
-      wsRef.current?.send(JSON.stringify({ type: "demo_text", mode }));
-      dispatch(setRecording(true));
+      dispatch(setRecording(false));
     }
   }
 
   function stopRecording(_mode: "customer" | "staff") {
-    const recorder = recorderRef.current;
-    if (recordingAutoStopTimerRef.current) window.clearTimeout(recordingAutoStopTimerRef.current);
-    recordingAutoStopTimerRef.current = null;
-    if (recorder && recorder.state !== "inactive") {
-      recorder.stop();           // triggers onstop → sends audio
-    } else {
-      // Was running in demo mode (no real mic) — no extra send needed
-      stopWaveform();
-    }
+    if (vadFrameRef.current) cancelAnimationFrame(vadFrameRef.current);
+    vadFrameRef.current = null;
+    const recorderWasActive = Boolean(recorderRef.current && recorderRef.current.state !== "inactive");
+    stopUtteranceRecording(true);
+    recorderRef.current = null;
+    recordingUtteranceRef.current = false;
+    sendingUtteranceRef.current = false;
+    if (!recorderWasActive) chunksRef.current = [];
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    analyserRef.current = null;
+    continuousAudioRef.current?.close().catch(() => { });
+    continuousAudioRef.current = null;
+    stopWaveform();
+    wsRef.current?.send(JSON.stringify({ type: "stop_listening", mode: modeRef.current }));
     dispatch(setRecording(false));
+  }
+
+  function runVadLoop() {
+    const analyser = analyserRef.current;
+    if (!analyser) return;
+
+    const data = new Uint8Array(analyser.fftSize);
+    const silenceMs = 1000;
+    const minSpeechMs = 500;
+    const maxUtteranceMs = 24000;
+    const threshold = 0.04;
+
+    const tick = () => {
+      if (!streamRef.current || !analyserRef.current) return;
+
+      analyser.getByteTimeDomainData(data);
+      const rms = getRms(data);
+      const now = performance.now();
+      const coolingDownFromAssistant = assistantAudioActiveRef.current || now - assistantAudioEndedAtRef.current < 900;
+      const hasSpeech = !coolingDownFromAssistant && !sendingUtteranceRef.current && rms > threshold;
+
+      if (hasSpeech) {
+        lastSpeechAtRef.current = now;
+        if (!recordingUtteranceRef.current) {
+          startUtteranceRecording();
+          speechStartedAtRef.current = now;
+        }
+      }
+
+      if (recordingUtteranceRef.current) {
+        const silentLongEnough = now - lastSpeechAtRef.current > silenceMs;
+        const spokeLongEnough = now - speechStartedAtRef.current > minSpeechMs;
+        const hitMaxLength = now - speechStartedAtRef.current > maxUtteranceMs;
+        if ((silentLongEnough && spokeLongEnough) || hitMaxLength) {
+          stopUtteranceRecording(true);
+        }
+      }
+
+      vadFrameRef.current = requestAnimationFrame(tick);
+    };
+
+    vadFrameRef.current = requestAnimationFrame(tick);
+  }
+
+  function startUtteranceRecording() {
+    const stream = streamRef.current;
+    if (!stream || recordingUtteranceRef.current) return;
+
+    chunksRef.current = [];
+    const recorder = new MediaRecorder(stream);
+    recorderRef.current = recorder;
+    recordingUtteranceRef.current = true;
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunksRef.current.push(event.data);
+    };
+
+    recorder.onstop = async () => {
+      recordingUtteranceRef.current = false;
+      if (chunksRef.current.length === 0 || sendingUtteranceRef.current) return;
+
+      sendingUtteranceRef.current = true;
+      const blob = new Blob(chunksRef.current, { type: recorder.mimeType });
+      chunksRef.current = [];
+      const wavBytes = await blobToWav(blob);
+
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: "audio_meta", mode: modeRef.current }));
+        wsRef.current.send(wavBytes);
+      }
+
+      window.setTimeout(() => {
+        sendingUtteranceRef.current = false;
+      }, 900);
+    };
+
+    recorder.start(250);
+  }
+
+  function stopUtteranceRecording(shouldSend: boolean) {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state === "inactive") return;
+    if (!shouldSend) chunksRef.current = [];
+    recorder.stop();
   }
 
   function replayLast() {
@@ -564,4 +627,13 @@ function writeString(view: DataView, offset: number, str: string) {
   for (let i = 0; i < str.length; i++) {
     view.setUint8(offset + i, str.charCodeAt(i));
   }
+}
+
+function getRms(data: Uint8Array): number {
+  let sum = 0;
+  for (const value of data) {
+    const normalized = (value - 128) / 128;
+    sum += normalized * normalized;
+  }
+  return Math.sqrt(sum / data.length);
 }

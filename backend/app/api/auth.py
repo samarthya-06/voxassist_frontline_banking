@@ -1,9 +1,9 @@
 """JWT authentication routes for RBAC — staff vs manager roles."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from passlib.hash import bcrypt
 from pydantic import BaseModel
@@ -18,7 +18,7 @@ JWT_SECRET = settings.jwt_secret
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 8
 
-# Demo users (in production → MongoDB users collection)
+# Local/demo users. Production must authenticate against MongoDB users.
 DEMO_USERS = {
     "staff1": {"password": "staff123", "role": "staff", "name": "Priya Sharma", "branch": "Central District", "desk_id": "FD-01"},
     "staff2": {"password": "staff123", "role": "staff", "name": "Rohan Mehta", "branch": "Central District", "desk_id": "FD-02"},
@@ -65,7 +65,7 @@ async def login(body: LoginRequest):
     if db_user is not None:
         user = db_user
         canonical_username = user.get("username", body.username)
-    else:
+    elif settings.seed_demo_users or settings.seed_demo_data:
         user = DEMO_USERS.get(body.username)
         if user is None:
             employee_aliases = {
@@ -78,6 +78,8 @@ async def login(body: LoginRequest):
             }
             canonical_username = employee_aliases.get(body.username, body.username)
             user = DEMO_USERS.get(canonical_username)
+    else:
+        user = None
     if not user or not _verify_password(body.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
@@ -87,7 +89,7 @@ async def login(body: LoginRequest):
         "name": user["name"],
         "branch": user["branch"],
         "deskId": user.get("desk_id") or user.get("deskId"),
-        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRY_HOURS),
+        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRY_HOURS),
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -124,6 +126,14 @@ def decode_token_value(token: str | None) -> UserInfo:
 def decode_token(credentials: HTTPAuthorizationCredentials | None = Depends(security)) -> UserInfo:
     """Dependency to extract and verify JWT from Authorization header."""
     return decode_token_value(credentials.credentials if credentials else None)
+
+
+def decode_token_header_or_query(
+    token: str | None = Query(default=None),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> UserInfo:
+    """Accept Bearer auth for REST and temporary query-token links for kiosk downloads."""
+    return decode_token_value(credentials.credentials if credentials else token)
 
 
 def require_role(role: str):

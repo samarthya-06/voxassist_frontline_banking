@@ -13,20 +13,20 @@ _ENV_FILE_BACKEND = Path(__file__).resolve().parent.parent.parent / ".env"
 
 class Settings(BaseSettings):
     sarvam_api_key: str | None = None
-    gemini_api_key: str | None = None
     mongodb_uri: str = "mongodb://localhost:27017"
     mongodb_db: str = "voxassist"
     chroma_persist_dir: str = ".chroma"
     kb_data_dir: str = "backend/data/kb"
     default_branch_id: str = "default"
     rag_top_k: int = 5
-    rag_min_confidence: float = 0.18
+    rag_min_confidence: float = 0.10
     rag_use_llm: bool = False
     ai_fast_mode: bool = True
     ai_async_tts: bool = True
     seed_demo_data: bool = False
+    seed_demo_users: bool = False
     allowed_origins: list[str] = ["http://localhost:5173"]
-    jwt_secret: str = "voxassist-dev-secret-change-in-production"
+    jwt_secret: str
 
     @field_validator("allowed_origins", mode="before")
     @classmethod
@@ -38,7 +38,7 @@ class Settings(BaseSettings):
                     return json.loads(stripped)
                 except json.JSONDecodeError:
                     # Fallback if JSON is malformed
-                    pass
+                    return [item.strip() for item in stripped.split(",") if item.strip()]
             return [item.strip() for item in stripped.split(",") if item.strip()]
         return value
 
@@ -46,6 +46,7 @@ class Settings(BaseSettings):
         # Try both the project root and the backend/ folder
         env_file=[str(_ENV_FILE), str(_ENV_FILE_BACKEND)],
         env_file_encoding="utf-8",
+        extra="ignore",
     )
 
 

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { buildSessionWsUrl } from "../../config/env";
+import { DEFAULT_CUSTOMER_LANGUAGE, DEFAULT_CUSTOMER_LANGUAGE_CODE } from "../../config/languages";
 import type { SopResult } from "../session/sessionSlice";
 
 type KioskConnectionStatus = "idle" | "connecting" | "connected" | "offline";
@@ -38,7 +40,7 @@ interface KioskState {
   assistantText: string | null;
   lastError: string | null;
   pdfUrl: string | null;
-  
+
   // Form State
   formActive: boolean;
   questionTranslated: string | null;
@@ -47,7 +49,7 @@ interface KioskState {
   filledCount: number;
   totalFields: number;
   isComplete: boolean;
-  
+
   // Transcript State
   lastCustomerTranscriptNative: string | null;
   lastCustomerTranscriptEnglish: string | null;
@@ -56,30 +58,15 @@ interface KioskState {
   sopResult: SopResult | null;
 }
 
-const WS_URL = import.meta.env.VITE_VOXASSIST_WS_URL ?? "ws://localhost:8000/ws/session/demo-session";
-
 function buildWsUrl(sessionId: string, authToken: string) {
-  let baseUrl = WS_URL;
-  // If the WS_URL has "demo-session" but we passed a specific one, replace it
-  if (baseUrl.includes("demo-session") && sessionId !== "demo-session") {
-    baseUrl = baseUrl.replace("demo-session", sessionId);
-  }
-  
-  try {
-    const url = new URL(baseUrl);
-    url.searchParams.set("token", authToken);
-    return url.toString();
-  } catch {
-    const separator = baseUrl.includes("?") ? "&" : "?";
-    return `${baseUrl}${separator}token=${encodeURIComponent(authToken)}`;
-  }
+  return buildSessionWsUrl(sessionId, authToken);
 }
 
 export function useKioskSession(sessionId: string | null, authToken: string | null) {
   const [state, setState] = useState<KioskState>({
     connectionStatus: "idle",
-    language: "Marathi",
-    languageCode: "mr-IN",
+    language: DEFAULT_CUSTOMER_LANGUAGE.language,
+    languageCode: DEFAULT_CUSTOMER_LANGUAGE.code,
     isListening: false,
     isSessionActive: false,
     isSpeaking: false,
@@ -117,7 +104,7 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
   const recordingUtteranceRef = useRef(false);
   const speechStartedAtRef = useRef(0);
   const lastSpeechAtRef = useRef(0);
-  const languageCodeRef = useRef("mr-IN");
+  const languageCodeRef = useRef(DEFAULT_CUSTOMER_LANGUAGE_CODE);
   const recognitionStartedRef = useRef(false);
   const recognitionFallbackTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const lastAssistantTextRef = useRef("");
@@ -194,7 +181,7 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
     resumeAfter = true,
   ) => {
     audioPlaybackQueueRef.current = audioPlaybackQueueRef.current
-      .catch(() => {})
+      .catch(() => { })
       .then(() => playAudioBase64(audioB64, fallbackText, langCode, { resumeAfter }));
   }, [playAudioBase64]);
 
@@ -207,7 +194,10 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
           setState((prev) => ({
             ...prev,
             lastCustomerTranscriptNative: data.item.originalText,
-            lastCustomerTranscriptEnglish: data.item.translatedText,
+            // Bug-3 fix: strip any RAG expansion suffix before displaying the
+            // translated text — the English hint appended for retrieval must
+            // never appear on the kiosk screen.
+            lastCustomerTranscriptEnglish: sanitizeTranscriptText(data.item.translatedText),
             lastStaffTranscriptEnglish: null,
             lastStaffTranscriptNative: null,
           }));
@@ -243,9 +233,13 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
             enqueueAudio(null, data.item.originalText, languageCodeRef.current);
           }
         } else if (data.item.speaker === "staff") {
+          // Bug-5 fix: do NOT overwrite assistantText here.
+          // The kiosk display shows the AI's response to the customer (assistantText).
+          // Overwriting it with the staff's translated speech replaces the AI answer
+          // with the Marathi version of what the staff member just said, which is wrong.
+          // Staff speech is tracked only via the dedicated transcript fields below.
           setState((prev) => ({
             ...prev,
-            assistantText: data.item.translatedText || data.item.originalText,
             lastStaffTranscriptEnglish: data.item.originalText,
             lastStaffTranscriptNative: data.item.translatedText,
             lastCustomerTranscriptNative: null,
@@ -357,7 +351,7 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
           sopResult: data.result,
         }));
         break;
-        
+
       case "recording_status":
         if (data.mode === "customer") {
           setState((prev) => ({ ...prev, isListening: Boolean(data.active) }));
@@ -426,7 +420,7 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
 
     try {
       await startVoiceLoop();
-      wsRef.current?.send(JSON.stringify({ type: "start_customer_session", languageCode: languageCodeRef.current || "mr-IN" }));
+      wsRef.current?.send(JSON.stringify({ type: "start_customer_session", languageCode: languageCodeRef.current || DEFAULT_CUSTOMER_LANGUAGE_CODE }));
     } catch {
       setState((prev) => ({
         ...prev,
@@ -494,7 +488,7 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
     if (vadFrameRef.current) cancelAnimationFrame(vadFrameRef.current);
     vadFrameRef.current = null;
     stopUtteranceRecording(false);
-    audioCtxRef.current?.close().catch(() => {});
+    audioCtxRef.current?.close().catch(() => { });
     audioCtxRef.current = null;
     analyserRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -509,7 +503,7 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
     recognitionStartedRef.current = false;
     const recognition = new Recognition();
     recognitionRef.current = recognition;
-    recognition.lang = languageCodeRef.current || "mr-IN";
+    recognition.lang = languageCodeRef.current || DEFAULT_CUSTOMER_LANGUAGE_CODE;
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
@@ -554,7 +548,10 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
       if (previewText) {
         setState((prev) => ({
           ...prev,
-          lastCustomerTranscriptNative: previewText,
+          // Bug-3 fix: interim previews from browser Speech Recognition can
+          // contain partial words that look like expansion terms; sanitize
+          // before showing on the kiosk display.
+          lastCustomerTranscriptNative: sanitizeTranscriptText(previewText) ?? previewText,
           lastCustomerTranscriptEnglish: "",
         }));
       }
@@ -584,7 +581,7 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
         type: "customer_text",
         mode: "customer",
         text,
-        languageCode: languageCodeRef.current || "mr-IN",
+        languageCode: languageCodeRef.current || DEFAULT_CUSTOMER_LANGUAGE_CODE,
       }));
     };
 
@@ -602,7 +599,7 @@ export function useKioskSession(sessionId: string | null, authToken: string | nu
     if (!recognition || !sessionActiveRef.current || pausedRef.current) return;
     try {
       recognitionStartedRef.current = false;
-      recognition.lang = languageCodeRef.current || "mr-IN";
+      recognition.lang = languageCodeRef.current || DEFAULT_CUSTOMER_LANGUAGE_CODE;
       recognition.start();
       if (recognitionFallbackTimerRef.current) window.clearTimeout(recognitionFallbackTimerRef.current);
       recognitionFallbackTimerRef.current = window.setTimeout(() => {
@@ -753,6 +750,43 @@ function delay(ms: number) {
   });
 }
 
+/**
+ * Strip RAG query-expansion suffixes that the backend appends to improve
+ * retrieval quality.  These strings must never appear on the kiosk screen.
+ *
+ * The patterns below mirror the expansions in
+ * ai_orchestrator._normalize_customer_query_for_rag() and
+ * _english_hint_for_native_text().  Keep this list in sync with those
+ * methods when new expansion patterns are added.
+ */
+const RAG_EXPANSION_SUFFIXES: readonly string[] = [
+  // Cheque bounce expansion
+  " cheque bounce cheque return insufficient funds charges drawer payee cibil",
+  // Stop-payment expansion
+  " cheque stop payment charges",
+  // Generic hint tail produced by _english_hint_for_native_text when no
+  // specific intent is matched — strip anything from "banking service
+  // information" onward to avoid cluttering the display.
+  " banking service information documents charges eligibility",
+];
+
+/**
+ * Remove backend RAG-expansion suffixes from a translated transcript string
+ * so that only the customer's actual words (or a clean translation) are shown.
+ */
+function sanitizeTranscriptText(text: string | null | undefined): string | null {
+  if (!text) return text ?? null;
+  const lower = text.toLowerCase();
+  for (const suffix of RAG_EXPANSION_SUFFIXES) {
+    const idx = lower.indexOf(suffix);
+    if (idx !== -1) {
+      const cleaned = text.slice(0, idx).trim();
+      return cleaned || text;
+    }
+  }
+  return text;
+}
+
 function normalizeSpeechText(text: string) {
   return text
     .toLowerCase()
@@ -794,7 +828,7 @@ async function speakWithBrowser(text: string, langCode: string) {
   window.speechSynthesis.cancel();
   await new Promise<void>((resolve) => {
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = langCode || "mr-IN";
+    utterance.lang = langCode || DEFAULT_CUSTOMER_LANGUAGE_CODE;
     utterance.rate = 0.92;
     utterance.pitch = 1;
     const voices = window.speechSynthesis.getVoices();

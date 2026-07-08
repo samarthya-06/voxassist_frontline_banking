@@ -1,4 +1,4 @@
-"""Persistent SOP vector store with deterministic local embeddings."""
+"""Persistent SOP vector store with semantic embeddings (sentence-transformers)."""
 
 from __future__ import annotations
 
@@ -9,6 +9,10 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    pass  # kept for future typing imports
 
 from ..core.config import settings
 from ..models.session import SopCitation, SopResult
@@ -16,11 +20,52 @@ from .kb_loader import KnowledgeChunk, chunk_documents, load_knowledge_documents
 
 logger = logging.getLogger(__name__)
 
+# ── Embedding model ────────────────────────────────────────────────────────
+# paraphrase-multilingual-MiniLM-L12-v2 is a ~45 MB multilingual model that
+# understands semantic similarity across English, Hindi, Marathi, and 50+
+# other languages.  It outputs 384-dimensional L2-normalised vectors, making
+# it a drop-in replacement for the previous hash-based embed.
+_SENTENCE_TRANSFORMER_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
+_st_model = None  # loaded lazily on first call
+
+
+def _get_st_model():
+    """Return the sentence-transformers model, loading it on first call.
+
+    Returns None (with a logged warning) if the package is not installed, so
+    the application falls back to the legacy hash embedding rather than
+    crashing at import time.
+    """
+    global _st_model
+    if _st_model is not None:
+        return _st_model
+    try:
+        from sentence_transformers import SentenceTransformer  # type: ignore
+        logger.info(
+            "Loading sentence-transformers model '%s' — first call may take a moment.",
+            _SENTENCE_TRANSFORMER_MODEL,
+        )
+        _st_model = SentenceTransformer(_SENTENCE_TRANSFORMER_MODEL)
+        logger.info("Embedding model loaded (dim=%d).", _st_model.get_sentence_embedding_dimension())
+    except ImportError:
+        logger.warning(
+            "sentence-transformers is not installed. "
+            "Falling back to hash-based embedding (no semantic understanding). "
+            "Run: pip install sentence-transformers"
+        )
+    return _st_model
+
+
+# Version tag embedded in the ChromaDB collection name.  Bump this whenever
+# the embedding model or dimension changes so that a fresh collection is
+# built automatically instead of mismatching stored vectors.
+_COLLECTION_VERSION = "v2"  # v1 = hash, v2 = sentence-transformers
+
 EMBED_DIM = 384
 STOPWORDS = {
     "a", "an", "and", "are", "as", "at", "be", "by", "can", "do", "for", "from", "how", "i", "in", "is",
     "it", "me", "my", "of", "on", "or", "our", "please", "should", "the", "to", "what", "when", "with",
-    "you", "your", "hai", "hain", "kya", "mala", "mujhe",
+    "you", "your", "branch", "customer", "does", "provide", "hai", "hain", "kya", "mala", "mujhe",
 }
 SYNONYMS = {
     "fd": ["fixed", "deposit", "term"],
@@ -31,6 +76,10 @@ SYNONYMS = {
     "docs": ["documents", "requirements"],
     "document": ["documents", "requirements"],
     "kyc": ["aadhaar", "pan", "identity"],
+    "bounce": ["cheque", "return", "charges", "cibil"],
+    "bounced": ["cheque", "return", "charges", "cibil"],
+    "return": ["returned", "cheque", "charges"],
+    "returned": ["return", "cheque", "charges"],
 }
 
 
@@ -64,8 +113,10 @@ class SopVectorStore:
 
             self.persist_dir.mkdir(parents=True, exist_ok=True)
             client = chromadb.PersistentClient(path=str(self.persist_dir))
+            # Collection name is versioned so a model/dimension change triggers
+            # an automatic clean rebuild instead of a shape mismatch error.
             self._collection = client.get_or_create_collection(
-                name="banking_knowledge",
+                name=f"banking_knowledge_{_COLLECTION_VERSION}",
                 metadata={"hnsw:space": "cosine"},
             )
             if chunks:
@@ -92,6 +143,7 @@ class SopVectorStore:
         """Return ranked KB chunks filtered by date and branch specificity."""
         if not query.strip():
             return []
+        query = _normalize_banking_query(query)
 
         top_k = top_k or settings.rag_top_k
         branch = _normalize_branch(branch_id or settings.default_branch_id)
@@ -121,10 +173,18 @@ class SopVectorStore:
             except Exception as e:
                 logger.error("ChromaDB search failed: %s", e)
 
-        if not ranked:
-            ranked = self._fallback_rank(query, branch)
+        lexical_ranked = self._fallback_rank(query, branch)
+        if ranked and lexical_ranked:
+            by_chunk_id = {match.chunk.id: match for match in ranked}
+            for match in lexical_ranked:
+                existing = by_chunk_id.get(match.chunk.id)
+                if existing is None or match.score > existing.score:
+                    by_chunk_id[match.chunk.id] = match
+            ranked = list(by_chunk_id.values())
+        elif not ranked:
+            ranked = lexical_ranked
 
-        return sorted(ranked, key=lambda item: item.score, reverse=True)[:top_k]
+        return sorted(ranked, key=lambda item: (item.score, _branch_specificity(item.chunk, branch)), reverse=True)[:top_k]
 
     async def search(self, query: str, branch_id: str | None = None) -> SopResult:
         """Compatibility helper for existing SOP search callers."""
@@ -229,21 +289,49 @@ def _tokenize(text: str) -> set[str]:
 
 
 def _expand_query(query: str) -> str:
-    tokens = re.findall(r"[\w]+", query.lower(), flags=re.UNICODE)
-    expansions: list[str] = [query]
+    normalized_query = _normalize_banking_query(query)
+    tokens = re.findall(r"[\w]+", normalized_query.lower(), flags=re.UNICODE)
+    expansions: list[str] = [normalized_query]
     for token in tokens:
         expansions.extend(SYNONYMS.get(token, []))
     return " ".join(expansions)
 
 
+def _normalize_banking_query(query: str) -> str:
+    lowered = query.lower()
+    cheque_terms = ("cheque", "check", "चेक", "धनादेश")
+    bounce_terms = (
+        "bounce", "bounced", "return", "returned", "insufficient", "बाउन्स", "बाउंस",
+        "परत", "रिटर्न", "वटला नाही", "अपुरी शिल्लक",
+    )
+    if any(term in lowered for term in cheque_terms) and any(term in lowered for term in bounce_terms):
+        return f"{query} cheque bounce cheque return insufficient funds charges drawer payee CIBIL"
+    return query
+
+
 def _embed(text: str) -> list[float]:
+    """Return a normalised embedding vector for *text*.
+
+    Uses the sentence-transformers multilingual model when available so that
+    semantically similar phrases in different languages (e.g. 'account opening'
+    and 'खाते उघडणे') map to nearby points in the embedding space.
+
+    Falls back to the legacy SHA-256 hash embedding when sentence-transformers
+    is not installed, preserving the previous behaviour rather than crashing.
+    """
+    model = _get_st_model()
+    if model is not None:
+        # normalize_embeddings=True returns unit-length vectors ready for
+        # cosine similarity in ChromaDB (hnsw:space="cosine").
+        return model.encode(text, normalize_embeddings=True).tolist()  # type: ignore[return-value]
+
+    # ── Legacy hash fallback (no semantic understanding) ────────────────
     vector = [0.0] * EMBED_DIM
     for token in _tokenize(_expand_query(text)):
         digest = hashlib.sha256(token.encode("utf-8")).digest()
         index = int.from_bytes(digest[:4], "big") % EMBED_DIM
         sign = 1.0 if digest[4] % 2 == 0 else -1.0
         vector[index] += sign
-
     norm = math.sqrt(sum(value * value for value in vector)) or 1.0
     return [value / norm for value in vector]
 
@@ -264,8 +352,12 @@ def _branch_allowed(chunk: KnowledgeChunk, branch: str) -> bool:
 def _branch_boost(chunk: KnowledgeChunk, branch: str) -> float:
     keys = _branch_keys(chunk)
     if branch != "default" and branch in keys:
-        return 0.18
+        return 0.42
     return 0.0
+
+
+def _branch_specificity(chunk: KnowledgeChunk, branch: str) -> int:
+    return int(branch != "default" and branch in _branch_keys(chunk))
 
 
 def _display_branch(chunk: KnowledgeChunk) -> str | None:

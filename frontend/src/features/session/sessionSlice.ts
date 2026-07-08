@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import { DEFAULT_CUSTOMER_LANGUAGE } from "../../config/languages";
 
 export type Speaker = "customer" | "staff" | "assistant";
 
@@ -140,8 +141,8 @@ const initialState: SessionState = {
   listenMode: "customer",
   isRecording: false,
   isMuted: false,
-  language: "Marathi",
-  languageCode: "mr-IN",
+  language: DEFAULT_CUSTOMER_LANGUAGE.language,
+  languageCode: DEFAULT_CUSTOMER_LANGUAGE.code,
   transcript: [],
   entities: {
     customerName: "",

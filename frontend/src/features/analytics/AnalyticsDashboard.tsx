@@ -1,12 +1,11 @@
-import { AlertTriangle, Calendar, Download, Loader2, RefreshCw, TrendingUp } from "lucide-react";
+import { AlertTriangle, Download, Filter, Loader2, RefreshCw, TrendingUp } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Badge } from "../../shared/ui/badge";
 import { Button } from "../../shared/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/card";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
+import { API_BASE } from "../../config/env";
 import { setAnalytics, setAnalyticsLoading, setAnalyticsError } from "./analyticsSlice";
-
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 
 function Bar({ label, value }: { label: string; value: number }) {
   const width = Math.min(Math.max(value, 0), 100);
@@ -28,6 +27,16 @@ function Bar({ label, value }: { label: string; value: number }) {
 }
 
 type TimeRange = "today" | "week" | "month" | "year" | "custom_day" | "custom_month" | "custom_year";
+
+const ANALYTICS_FILTER_OPTIONS: Array<{ value: TimeRange; label: string }> = [
+  { value: "today", label: "Today" },
+  { value: "week", label: "This Week" },
+  { value: "month", label: "This Month" },
+  { value: "year", label: "This Year" },
+  { value: "custom_day", label: "Select Date" },
+  { value: "custom_month", label: "Select Month" },
+  { value: "custom_year", label: "Select Year" },
+];
 
 type AnalyticsDashboardProps = {
   authToken: string;
@@ -119,55 +128,52 @@ export function AnalyticsDashboard({ authToken }: AnalyticsDashboardProps) {
           <h2 className="text-h1 font-semibold">Analytics Dashboard</h2>
           <p className="mt-1 text-sm text-on-surface-variant">Real-time branch demand, language mix, and escalation signals.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {/* Time Range Buttons */}
-          {([
-            ["today", "Today"],
-            ["week", "This Week"],
-            ["month", "This Month"],
-            ["year", "This Year"],
-          ] as [TimeRange, string][]).map(([key, label]) => (
-            <Button
-              key={key}
-              variant={timeRange === key ? "primary" : "outline"}
-              onClick={() => setTimeRange(key)}
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex h-9 items-center gap-2 rounded border border-outline-variant bg-white px-3 text-sm font-medium text-on-surface">
+            <Filter className="h-4 w-4 text-outline" />
+            <span className="text-outline">Filter</span>
+            <select
+              value={timeRange}
+              onChange={(event) => setTimeRange(event.target.value as TimeRange)}
+              className="min-w-[8rem] border-0 bg-transparent font-semibold outline-none"
+              aria-label="Analytics time filter"
             >
-              <Calendar className="h-4 w-4" />
-              {label}
-            </Button>
-          ))}
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(event) => {
-              setSelectedDate(event.target.value);
-              setTimeRange("custom_day");
-            }}
-            className="h-9 rounded border border-outline-variant bg-white px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-            aria-label="Filter analytics by day"
-          />
-          <input
-            type="month"
-            value={selectedMonth}
-            onChange={(event) => {
-              setSelectedMonth(event.target.value);
-              setTimeRange("custom_month");
-            }}
-            className="h-9 rounded border border-outline-variant bg-white px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-            aria-label="Filter analytics by month"
-          />
-          <input
-            type="number"
-            value={selectedYear}
-            onChange={(event) => {
-              setSelectedYear(event.target.value);
-              setTimeRange("custom_year");
-            }}
-            min="2020"
-            max="2100"
-            className="h-9 w-24 rounded border border-outline-variant bg-white px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-            aria-label="Filter analytics by year"
-          />
+              {ANALYTICS_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {timeRange === "custom_day" && (
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(event) => setSelectedDate(event.target.value)}
+              className="h-9 rounded border border-outline-variant bg-white px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              aria-label="Filter analytics by day"
+            />
+          )}
+          {timeRange === "custom_month" && (
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(event) => setSelectedMonth(event.target.value)}
+              className="h-9 rounded border border-outline-variant bg-white px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              aria-label="Filter analytics by month"
+            />
+          )}
+          {timeRange === "custom_year" && (
+            <input
+              type="number"
+              value={selectedYear}
+              onChange={(event) => setSelectedYear(event.target.value)}
+              min="2020"
+              max="2100"
+              className="h-9 w-24 rounded border border-outline-variant bg-white px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              aria-label="Filter analytics by year"
+            />
+          )}
           <Button
             variant="outline"
             onClick={fetchAnalytics}

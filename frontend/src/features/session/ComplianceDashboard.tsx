@@ -13,11 +13,10 @@ import {
   User,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { API_BASE } from "../../config/env";
 import { Badge } from "../../shared/ui/badge";
 import { Button } from "../../shared/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/card";
-
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 
 type SessionRecord = {
   session_id: string;

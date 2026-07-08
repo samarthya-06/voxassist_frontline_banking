@@ -1,6 +1,7 @@
 """MongoDB persistence layer with in-memory fallback."""
 
 import logging
+import re
 import uuid
 from datetime import date, datetime, time, timedelta
 
@@ -10,6 +11,21 @@ from ..core.config import settings
 from ..db.connection import get_db, get_client, ensure_indexes, is_mongo_available
 
 logger = logging.getLogger(__name__)
+
+LANGUAGE_CODE_TO_NAME = {
+    "hi-IN": "Hindi",
+    "mr-IN": "Marathi",
+    "ta-IN": "Tamil",
+    "te-IN": "Telugu",
+    "kn-IN": "Kannada",
+    "gu-IN": "Gujarati",
+    "bn-IN": "Bengali",
+    "ml-IN": "Malayalam",
+    "pa-IN": "Punjabi",
+    "en-IN": "English",
+}
+
+UNKNOWN_LANGUAGE_VALUES = {"", "unknown", "unspecified", "auto-detected", "auto detected", "auto"}
 
 
 class SessionRepository:
@@ -31,7 +47,8 @@ class SessionRepository:
         """Create indexes and seed demo users when MongoDB is available."""
         await ensure_indexes()
         if is_mongo_available():
-            await self._seed_demo_users()
+            if settings.seed_demo_users or settings.seed_demo_data:
+                await self._seed_demo_users()
             logger.info("MongoDB database '%s' is ready", settings.mongodb_db)
 
         if settings.seed_demo_data:
@@ -434,8 +451,8 @@ class SessionRepository:
             doc = await self.db.session_summaries.find_one({"session_id": session_id})
             if doc:
                 return doc.get("summary", doc)
-        except (PyMongoError, ServerSelectionTimeoutError):
-            pass
+        except (PyMongoError, ServerSelectionTimeoutError) as exc:
+            logger.debug("MongoDB summary lookup failed for %s; using memory fallback: %s", session_id, exc)
         return self.memory.get(session_id, {}).get("summary")
 
     # ── Session Records / History / Analytics ───────────────────────────────
@@ -461,20 +478,20 @@ class SessionRepository:
                 start = datetime.combine(selected, time.min)
                 return start, start + timedelta(days=1)
             except ValueError:
-                pass
+                logger.debug("Ignoring invalid analytics date filter: %s", date_value)
         if month_value:
             try:
                 start = datetime.strptime(month_value, "%Y-%m")
                 end = datetime(start.year + (1 if start.month == 12 else 0), 1 if start.month == 12 else start.month + 1, 1)
                 return start, end
             except ValueError:
-                pass
+                logger.debug("Ignoring invalid analytics month filter: %s", month_value)
         if year_value:
             try:
                 year = int(year_value)
                 return datetime(year, 1, 1), datetime(year + 1, 1, 1)
             except ValueError:
-                pass
+                logger.debug("Ignoring invalid analytics year filter: %s", year_value)
         if time_range == "today":
             start = now.replace(hour=0, minute=0, second=0, microsecond=0)
             return start, start + timedelta(days=1)
@@ -512,10 +529,22 @@ class SessionRepository:
         except (ValueError, IndexError):
             return 0
 
-    def _infer_language(self, transcripts: list[dict], fallback: str = "Unknown") -> str:
+    def _normalize_language(self, value: str | None) -> str:
+        if not value:
+            return ""
+        normalized = str(value).strip()
+        if normalized in LANGUAGE_CODE_TO_NAME:
+            return LANGUAGE_CODE_TO_NAME[normalized]
+        if normalized.lower() in UNKNOWN_LANGUAGE_VALUES:
+            return ""
+        return normalized
+
+    def _infer_language(self, transcripts: list[dict], fallback: str = "") -> str:
         for item in transcripts:
-            if item.get("speaker") == "customer" and item.get("sourceLanguage"):
-                return item["sourceLanguage"]
+            if item.get("speaker") == "customer":
+                language = self._normalize_language(item.get("sourceLanguage"))
+                if language:
+                    return language
         return fallback
 
     def _infer_service(self, summary: dict, transcripts: list[dict], forms: list[dict]) -> str:
@@ -527,19 +556,24 @@ class SessionRepository:
             f"{item.get('originalText', '')} {item.get('translatedText', '')}"
             for item in transcripts
         ).lower()
+        if not text.strip():
+            return "Unclassified Session"
         service_keywords = [
-            ("Fixed Deposit Enquiry", ("fixed deposit", "fd", "deposit", "व्याज")),
-            ("Account Opening", ("open account", "account opening", "savings account", "खाते")),
-            ("KYC Update", ("kyc", "aadhaar", "pan", "address update")),
-            ("Card Support", ("card", "debit", "credit", "pin", "block")),
-            ("Loan Enquiry", ("loan", "home loan", "personal loan", "कर्ज")),
-            ("NEFT Transfer Help", ("neft", "rtgs", "imps", "transfer")),
-            ("Locker Enquiry", ("locker", "safe deposit")),
+            ("Fixed Deposit Enquiry", ("fixed deposit", "fd", "deposit", "term deposit", "interest rate", "maturity", "व्याज", "मुदत ठेव", "फिक्स्ड", "फिक्स डिपॉझिट", "सावधि जमा")),
+            ("Account Opening", ("open account", "account opening", "savings account", "current account", "new account", "खाते", "खाता", "अकाउंट", "बचत खाते")),
+            ("KYC Update", ("kyc", "aadhaar", "aadhar", "pan", "address update", "identity", "verification", "केवायसी", "आधार", "पॅन")),
+            ("Card Support", ("card", "debit", "credit", "pin", "block", "replacement card", "lost card", "कार्ड", "डेबिट", "क्रेडिट")),
+            ("Loan Enquiry", ("loan", "home loan", "personal loan", "vehicle loan", "emi", "कर्ज", "लोन", "ऋण")),
+            ("Money Transfer", ("neft", "rtgs", "imps", "transfer", "upi", "fund transfer", "ट्रान्सफर", "हस्तांतरण")),
+            ("Locker Enquiry", ("locker", "safe deposit", "लॉकर")),
+            ("Cheque Services", ("cheque", "check book", "chequebook", "stop cheque", "चेक")),
+            ("Balance / Statement", ("balance", "statement", "passbook", "mini statement", "बॅलन्स", "स्टेटमेंट", "पासबुक")),
+            ("Nomination Update", ("nominee", "nomination", "nominate", "नामांकन", "नॉमिनी")),
         ]
         for label, keywords in service_keywords:
             if any(keyword in text for keyword in keywords):
                 return label
-        return "General Service"
+        return "General Banking Help"
 
     def _merge_entities(self, summary: dict, transcripts: list[dict]) -> dict:
         entities = {
@@ -557,9 +591,13 @@ class SessionRepository:
             if not entities["customerName"]:
                 # Keep this intentionally conservative; detailed extraction still
                 # happens in the orchestrator during live calls.
-                lowered = text.lower()
-                if "my name is" in lowered:
-                    entities["customerName"] = text[lowered.index("my name is") + 11:].split(".")[0].strip()[:60]
+                name = re.search(
+                    r"(?:my name is|i am|i'm|this is|name is|mera naam|mera name|माझे नाव|माझं नाव|मेरा नाम)\s+([A-Za-z][A-Za-z.'-]*(?:\s+[A-Za-z][A-Za-z.'-]*){0,3})",
+                    text,
+                    flags=re.IGNORECASE,
+                )
+                if name:
+                    entities["customerName"] = " ".join(part.capitalize() for part in name.group(1).split())[:60]
         return entities
 
     def _normalize_session_record(
@@ -586,7 +624,13 @@ class SessionRepository:
         if not status:
             status = "Escalated" if compliance_events else ("Completed" if (meta_doc or {}).get("status") == "completed" else "Active")
 
-        language = summary.get("language") or (meta_doc or {}).get("customer_language") or self._infer_language(transcripts)
+        language = (
+            self._normalize_language(summary.get("language"))
+            or self._normalize_language((meta_doc or {}).get("customer_language"))
+            or self._normalize_language((meta_doc or {}).get("customer_language_code"))
+            or self._infer_language(transcripts)
+            or "Unspecified"
+        )
         forms_filled = summary.get("formsFilled")
         if forms_filled is None:
             forms_filled = [item.get("form_title") or item.get("form_type", "Form") for item in forms if item.get("is_complete")]
@@ -681,8 +725,8 @@ class SessionRepository:
                 async for doc in cursor:
                     doc.pop("_id", None)
                     compliance_docs.setdefault(doc.get("session_id", ""), []).append(doc)
-        except (PyMongoError, ServerSelectionTimeoutError):
-            pass
+        except (PyMongoError, ServerSelectionTimeoutError) as exc:
+            logger.debug("MongoDB session record aggregation failed; using memory fallback: %s", exc)
 
         for sid, doc in self.memory.items():
             if doc.get("summary"):
@@ -807,14 +851,16 @@ class SessionRepository:
 
         for doc in all_sessions:
             summary = doc.get("summary", {})
-            service = summary.get("service", "General")
-            language = summary.get("language", "Unknown")
+            service = summary.get("service", "Unclassified Session")
+            language = self._normalize_language(summary.get("language"))
             duration_str = summary.get("duration", "")
             forms = summary.get("formsFilled", [])
             flags = summary.get("complianceFlags", 0)
 
-            service_counts[service] = service_counts.get(service, 0) + 1
-            language_counts[language] = language_counts.get(language, 0) + 1
+            if service and service != "Unclassified Session":
+                service_counts[service] = service_counts.get(service, 0) + 1
+            if language:
+                language_counts[language] = language_counts.get(language, 0) + 1
 
             if duration_str and ":" in duration_str:
                 seconds = self._duration_to_seconds(duration_str)
@@ -828,14 +874,16 @@ class SessionRepository:
 
         # Format service bars (as percentage of total sessions)
         total = len(all_sessions) or 1
+        service_total = sum(service_counts.values()) or 1
+        language_total = sum(language_counts.values()) or 1
         top_services = sorted(
-            [{"label": k, "value": round(v / total * 100)} for k, v in service_counts.items()],
+            [{"label": k, "value": round(v / service_total * 100)} for k, v in service_counts.items()],
             key=lambda x: x["value"],
             reverse=True,
         )[:8]  # Top 8 services
 
         languages = sorted(
-            [{"label": k, "value": round(v / total * 100)} for k, v in language_counts.items()],
+            [{"label": k, "value": round(v / language_total * 100)} for k, v in language_counts.items()],
             key=lambda x: x["value"],
             reverse=True,
         )[:6]  # Top 6 languages
@@ -886,8 +934,8 @@ class SessionRepository:
                 {"$set": {"session_id": session_id, "pdf_data": pdf_bytes, "timestamp": datetime.now().isoformat()}},
                 upsert=True,
             )
-        except (PyMongoError, ServerSelectionTimeoutError):
-            pass
+        except (PyMongoError, ServerSelectionTimeoutError) as exc:
+            logger.debug("MongoDB form PDF save failed for %s; memory copy retained: %s", session_id, exc)
 
     async def get_form_pdf(self, session_id: str) -> bytes | None:
         """Retrieve stored form PDF bytes."""
@@ -897,8 +945,8 @@ class SessionRepository:
             doc = await self.db.form_pdfs.find_one({"session_id": session_id})
             if doc:
                 return doc.get("pdf_data")
-        except (PyMongoError, ServerSelectionTimeoutError):
-            pass
+        except (PyMongoError, ServerSelectionTimeoutError) as exc:
+            logger.debug("MongoDB form PDF lookup failed for %s; using memory fallback: %s", session_id, exc)
         return None
 
     # ── Session Lifecycle ─────────────────────────────────────────────────────
@@ -913,8 +961,8 @@ class SessionRepository:
                 existing_db.pop("_id", None)
                 self.session_meta_memory[session_id] = existing_db
                 return
-        except (PyMongoError, ServerSelectionTimeoutError):
-            pass
+        except (PyMongoError, ServerSelectionTimeoutError) as exc:
+            logger.debug("MongoDB active session lookup failed for %s: %s", session_id, exc)
 
         doc = {
             "session_id": session_id,
@@ -934,8 +982,8 @@ class SessionRepository:
             await self.db.sessions.update_one(
                 {"session_id": session_id}, {"$set": doc}, upsert=True
             )
-        except (PyMongoError, ServerSelectionTimeoutError):
-            pass
+        except (PyMongoError, ServerSelectionTimeoutError) as exc:
+            logger.debug("MongoDB session create failed for %s; memory copy retained: %s", session_id, exc)
 
     async def update_session_metadata(self, session_id: str, updates: dict) -> None:
         if session_id in self.session_meta_memory:
@@ -944,8 +992,8 @@ class SessionRepository:
             await self.db.sessions.update_one(
                 {"session_id": session_id}, {"$set": updates}
             )
-        except (PyMongoError, ServerSelectionTimeoutError):
-            pass
+        except (PyMongoError, ServerSelectionTimeoutError) as exc:
+            logger.debug("MongoDB session metadata update failed for %s: %s", session_id, exc)
 
     async def end_session(self, session_id: str) -> None:
         """Mark a session as completed and compute duration."""
@@ -964,8 +1012,8 @@ class SessionRepository:
             await self.db.sessions.update_one(
                 {"session_id": session_id}, {"$set": update}
             )
-        except (PyMongoError, ServerSelectionTimeoutError):
-            pass
+        except (PyMongoError, ServerSelectionTimeoutError) as exc:
+            logger.debug("MongoDB session end update failed for %s: %s", session_id, exc)
 
     # ── Transcript Persistence ────────────────────────────────────────────────
     async def save_transcript(self, session_id: str, item: dict) -> None:
@@ -974,8 +1022,8 @@ class SessionRepository:
         self.transcript_memory.setdefault(session_id, []).append(doc)
         try:
             await self.db.transcripts.insert_one(doc)
-        except (PyMongoError, ServerSelectionTimeoutError):
-            pass
+        except (PyMongoError, ServerSelectionTimeoutError) as exc:
+            logger.debug("MongoDB transcript save failed for %s; memory copy retained: %s", session_id, exc)
 
     async def get_transcripts(self, session_id: str) -> list[dict]:
         """Retrieve all transcript turns for a session."""
@@ -987,8 +1035,8 @@ class SessionRepository:
                 results.append(doc)
             if results:
                 return results
-        except (PyMongoError, ServerSelectionTimeoutError):
-            pass
+        except (PyMongoError, ServerSelectionTimeoutError) as exc:
+            logger.debug("MongoDB transcript lookup failed for %s; using memory fallback: %s", session_id, exc)
         return self.transcript_memory.get(session_id, [])
 
     # ── Compliance Audit Trail ────────────────────────────────────────────────
@@ -1008,8 +1056,8 @@ class SessionRepository:
         self.compliance_memory.append(doc)
         try:
             await self.db.compliance_events.insert_one(doc)
-        except (PyMongoError, ServerSelectionTimeoutError):
-            pass
+        except (PyMongoError, ServerSelectionTimeoutError) as exc:
+            logger.debug("MongoDB compliance event save failed for %s; memory copy retained: %s", session_id, exc)
 
     # ── Form Submission Persistence ───────────────────────────────────────────
     async def save_form_submission(
@@ -1033,8 +1081,8 @@ class SessionRepository:
                 {"$set": doc},
                 upsert=True,
             )
-        except (PyMongoError, ServerSelectionTimeoutError):
-            pass
+        except (PyMongoError, ServerSelectionTimeoutError) as exc:
+            logger.debug("MongoDB form submission save failed for %s; memory copy retained: %s", session_id, exc)
 
 
 repository = SessionRepository()

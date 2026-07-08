@@ -4,15 +4,16 @@ import asyncio
 import csv
 import io
 import json
+import logging
 import os
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import StreamingResponse
 
-from .auth import UserInfo, decode_token, decode_token_value
+from .auth import UserInfo, decode_token, decode_token_header_or_query, decode_token_value
 from ..models.forms import get_all_form_types
-from ..services.ai_orchestrator import AIOrchestrator
+from ..services.ai_orchestrator import AIOrchestrator, DEFAULT_LANGUAGE_CODE
 from ..services.repositories import repository
 from ..services.session_manager import manager
 
@@ -20,6 +21,7 @@ router = APIRouter()
 orchestrators: dict[str, AIOrchestrator] = {}
 DEVANAGARI_FONT_NAME = "VoxAssistDevanagari"
 _devanagari_font_registered = False
+logger = logging.getLogger(__name__)
 
 
 def _rag_query_from_payload(payload: dict) -> str:
@@ -30,6 +32,21 @@ def _rag_query_from_payload(payload: dict) -> str:
         " ".join(payload.get("actionChips", []) or []),
     ]
     return " ".join(part for part in text_parts if part).strip()
+
+
+def _should_auto_search_sop(payload: dict, mode: str) -> bool:
+    """Only auto-search trusted SOPs for real customer intents, not default UI chips."""
+    if mode != "customer":
+        return False
+    chips = [str(chip).strip().lower() for chip in payload.get("actionChips", []) or [] if str(chip).strip()]
+    if not chips:
+        return False
+    default_chips = {"search policy", "continue conversation"}
+    if set(chips).issubset(default_chips):
+        return False
+    if any(chip.startswith("start ") for chip in chips):
+        return False
+    return bool(_rag_query_from_payload(payload))
 
 
 def _pop_deferred_tts(payload: dict) -> list[tuple[str, str | None, str]]:
@@ -89,10 +106,18 @@ async def _send_deferred_tts(
             message["chunkIndex"] = index
             message["isFinalChunk"] = index == len(chunks) - 1
             await manager.send_json(session_id, message)
-    except Exception:
+    except Exception as exc:
         # The transcript has already been delivered; losing delayed audio should
-        # not break the live session loop.
-        pass
+        # not break the live session loop. Send a text-only TTS event so kiosk
+        # can fall back to browser speech instead of staying silent.
+        logger.warning("Deferred TTS failed for session %s audience %s: %s", session_id, audience, exc)
+        await manager.send_json(session_id, {
+            "type": "tts_audio",
+            "audio_b64": None,
+            "text": text,
+            "audience": audience,
+            "isFinalChunk": True,
+        })
 
 
 def _schedule_deferred_tts(
@@ -223,8 +248,9 @@ def get_devanagari_font_name() -> str:
 # ── WebSocket: Live Session ──────────────────────────────────────────────────
 @router.websocket("/ws/session/{session_id}")
 async def session_socket(websocket: WebSocket, session_id: str) -> None:
+    websocket_token = websocket.query_params.get("token")
     try:
-        user = decode_token_value(websocket.query_params.get("token"))
+        user = decode_token_value(websocket_token)
     except HTTPException:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
@@ -243,7 +269,7 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
         if orchestrator.detected_language_code:
             await websocket.send_json({
                 "type": "language_detected",
-                "language": orchestrator.detected_language or "Marathi",
+                "language": orchestrator.detected_language or "English",
                 "code": orchestrator.detected_language_code,
             })
 
@@ -256,7 +282,7 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
             # ── Binary audio data (complete WAV blob from frontend) ──
             if "bytes" in message:
                 # If a form interview is active, route audio to form engine
-                if orchestrator.form_session and not orchestrator.form_session.is_complete:
+                if current_mode == "customer" and orchestrator.form_session and not orchestrator.form_session.is_complete:
                     payload = await orchestrator.process_form_audio_turn(message["bytes"])
                     await manager.send_json(session_id, payload)
 
@@ -264,12 +290,20 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
 
                 # Normal live session audio processing
                 payload = await orchestrator.process_audio_turn(message["bytes"], current_mode)
+                if payload.get("type") == "asr_status":
+                    await manager.send_json(session_id, payload)
+                    continue
                 auto_start_form = payload.pop("autoStartForm", None)
                 tts_tasks = _pop_deferred_tts(payload)
 
                 # Persist transcript turn
                 if payload.get("item"):
                     await repository.save_transcript(session_id, payload["item"])
+                if payload.get("languageDetected"):
+                    await repository.update_session_metadata(session_id, {
+                        "customer_language": payload["languageDetected"]["language"],
+                        "customer_language_code": payload["languageDetected"]["code"],
+                    })
 
                 # Check compliance BEFORE sending the payload
                 # We only check compliance for the staff
@@ -310,7 +344,7 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
                     await manager.send_json(session_id, payload["escalation"])
 
                 # Auto-trigger SOP search based on detected intent
-                if payload.get("actionChips"):
+                if _should_auto_search_sop(payload, current_mode):
                     intent_query = _rag_query_from_payload(payload)
                     result_language = orchestrator.detected_language_code if current_mode == "customer" else "en-IN"
                     sop_result = await orchestrator.search_sop(intent_query, result_language or "en-IN")
@@ -336,7 +370,11 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
                 await manager.send_json(session_id, {"type": "recording_status", "mode": current_mode, "active": True})
 
             elif kind == "set_language":
-                lang_info = orchestrator.set_language(data.get("code", "mr-IN"))
+                lang_info = orchestrator.set_language(data.get("code", DEFAULT_LANGUAGE_CODE))
+                await repository.update_session_metadata(session_id, {
+                    "customer_language": lang_info["language"],
+                    "customer_language_code": lang_info["code"],
+                })
                 await manager.send_json(session_id, {
                     "type": "language_detected",
                     "language": lang_info["language"],
@@ -364,7 +402,11 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
 
             elif kind == "start_customer_session":
                 current_mode = "customer"
-                lang_info = orchestrator.set_language(data.get("languageCode", "mr-IN"))
+                lang_info = orchestrator.set_language(data.get("languageCode", DEFAULT_LANGUAGE_CODE))
+                await repository.update_session_metadata(session_id, {
+                    "customer_language": lang_info["language"],
+                    "customer_language_code": lang_info["code"],
+                })
                 await manager.send_json(session_id, {
                     "type": "language_detected",
                     "language": lang_info["language"],
@@ -383,6 +425,11 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
             elif kind == "demo_text":
                 # Explicit demo request (no real mic)
                 payload = await orchestrator.process_demo_turn(current_mode)
+                if payload.get("type") == "asr_status":
+                    await manager.send_json(session_id, payload)
+                    continue
+                if payload.get("item"):
+                    await repository.save_transcript(session_id, payload["item"])
                 
                 if current_mode == "staff":
                     alert = await orchestrator.check_compliance(payload["item"]["originalText"])
@@ -396,7 +443,7 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
                     await manager.send_json(session_id, payload)
                     await manager.send_json(session_id, {"type": "compliance", "alert": None})
 
-                if payload.get("actionChips"):
+                if _should_auto_search_sop(payload, current_mode):
                     intent_query = _rag_query_from_payload(payload)
                     result_language = orchestrator.detected_language_code if current_mode == "customer" else "en-IN"
                     sop_result = await orchestrator.search_sop(intent_query, result_language or "en-IN")
@@ -406,7 +453,7 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
                 current_mode = data.get("mode", "staff" if kind == "staff_text" else "customer")
                 language_code = data.get("languageCode")
 
-                if orchestrator.form_session and not orchestrator.form_session.is_complete:
+                if current_mode == "customer" and orchestrator.form_session and not orchestrator.form_session.is_complete:
                     payload = await orchestrator.process_form_text_turn(
                         data.get("text", ""),
                         current_mode,
@@ -420,8 +467,18 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
                     current_mode,
                     language_code,
                 )
+                if payload.get("type") == "asr_status":
+                    await manager.send_json(session_id, payload)
+                    continue
                 auto_start_form = payload.pop("autoStartForm", None)
                 tts_tasks = _pop_deferred_tts(payload)
+                if payload.get("item"):
+                    await repository.save_transcript(session_id, payload["item"])
+                if payload.get("languageDetected"):
+                    await repository.update_session_metadata(session_id, {
+                        "customer_language": payload["languageDetected"]["language"],
+                        "customer_language_code": payload["languageDetected"]["code"],
+                    })
 
                 if current_mode == "staff":
                     alert = await orchestrator.check_compliance(payload["item"]["originalText"])
@@ -437,7 +494,7 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
                 _schedule_deferred_tts(session_id, orchestrator, tts_tasks)
                 await manager.send_json(session_id, {"type": "compliance", "alert": None})
 
-                if payload.get("actionChips"):
+                if _should_auto_search_sop(payload, current_mode):
                     intent_query = _rag_query_from_payload(payload)
                     result_language = orchestrator.detected_language_code if current_mode == "customer" else "en-IN"
                     sop_result = await orchestrator.search_sop(intent_query, result_language or "en-IN")
@@ -448,7 +505,7 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
                     await manager.send_json(session_id, form_payload)
 
             elif kind == "stop":
-                pass  # recording stopped; audio blob arrives separately
+                continue  # recording stopped; audio blob arrives separately
 
             elif kind == "summarize":
                 summary = await orchestrator.summarize()
@@ -480,7 +537,7 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
                     await repository.save_form_pdf(session_id, pdf_buf.getvalue())
                     await manager.send_json(session_id, {
                         "type": "form_pdf_ready",
-                        "downloadUrl": f"/form/{session_id}/pdf",
+                        "downloadUrl": f"/form/{session_id}/pdf?token={websocket_token}",
                     })
                 except ValueError as e:
                     await manager.send_json(session_id, {
@@ -489,7 +546,7 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
                     })
 
     except WebSocketDisconnect:
-        pass
+        logger.debug("WebSocket disconnected for session %s", session_id)
     finally:
         manager.disconnect(session_id, websocket)
         # Only tear down orchestrator if no clients remain
@@ -503,8 +560,8 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
                     try:
                         summary = await disconnected_orchestrator.summarize()
                         await repository.save_summary(session_id, summary)
-                    except Exception as e:
-                        print(f"Error generating automatic summary for {session_id}: {e}")
+                    except Exception:
+                        logger.exception("Automatic summary generation failed for session %s", session_id)
 
                 # Persist form submission if a form was completed
                 if disconnected_orchestrator.form_session and disconnected_orchestrator.form_session.is_complete:
@@ -516,14 +573,17 @@ async def session_socket(websocket: WebSocket, session_id: str) -> None:
                             session_id, fs.form_type.value, form_def.title,
                             fs.filled_fields, fs.is_complete
                         )
-                    except (ValueError, KeyError):
-                        pass
+                    except (ValueError, KeyError) as exc:
+                        logger.warning("Completed form persistence failed for session %s: %s", session_id, exc)
                 await disconnected_orchestrator.close()
 
 
 # ── REST: Form PDF Download ──────────────────────────────────────────────────
 @router.get("/form/{session_id}/pdf")
-async def download_form_pdf(session_id: str):
+async def download_form_pdf(
+    session_id: str,
+    user: UserInfo = Depends(decode_token_header_or_query),
+):
     """Download the AI-filled banking form as PDF."""
     # Try stored PDF first
     pdf_bytes = await repository.get_form_pdf(session_id)
@@ -556,14 +616,14 @@ async def download_form_pdf(session_id: str):
 
 # ── REST: Available Form Types ───────────────────────────────────────────────
 @router.get("/forms")
-async def list_form_types():
+async def list_form_types(user: UserInfo = Depends(decode_token)):
     """Return all available banking form types."""
     return {"forms": get_all_form_types()}
 
 
 # ── REST: PDF Receipt Generation ─────────────────────────────────────────────
 @router.post("/session/{session_id}/receipt")
-async def generate_receipt(session_id: str):
+async def generate_receipt(session_id: str, user: UserInfo = Depends(decode_token)):
     """Generate a bilingual PDF receipt for a completed session."""
     summary = await repository.get_summary(session_id)
     if not summary:

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppShell } from "./layout/AppShell";
 import { LoginPage } from "../features/auth/LoginPage";
 import { AnalyticsDashboard } from "../features/analytics/AnalyticsDashboard";
@@ -25,8 +25,15 @@ export function App() {
     return saved ? JSON.parse(saved) : null;
   });
   const [activeView, setActiveView] = useState<View>("session");
-  const [activeSessionId, setActiveSessionId] = useState(() => `session-${Date.now()}`);
+  const [activeSessionId, setActiveSessionId] = useState(() => {
+    const saved = sessionStorage.getItem("voxassist_active_session");
+    return saved || `session-${Date.now()}`;
+  });
   const [lastSessionId, setLastSessionId] = useState(activeSessionId);
+
+  useEffect(() => {
+    sessionStorage.setItem("voxassist_active_session", activeSessionId);
+  }, [activeSessionId]);
 
   // ── Kiosk Route Bypass ──
   if (window.location.pathname === '/kiosk') {
@@ -51,6 +58,7 @@ export function App() {
   const handleViewChange = (view: View) => {
     if (view === "session" && activeView !== "session") {
       const nextSessionId = `session-${Date.now()}`;
+      sessionStorage.setItem("voxassist_active_session", nextSessionId);
       setActiveSessionId(nextSessionId);
       setLastSessionId(nextSessionId);
     }
@@ -58,11 +66,12 @@ export function App() {
   };
 
   return (
-    <AppShell activeView={activeView} onViewChange={handleViewChange} onLogout={handleLogout}>
+    <AppShell activeView={activeView} onViewChange={handleViewChange}>
       {activeView === "session" && (
         <LiveSession
           authToken={user.token}
           sessionId={activeSessionId}
+          onLogout={handleLogout}
           onEndSession={() => {
             setLastSessionId(activeSessionId);
             setActiveView("summary");

@@ -1,19 +1,14 @@
 import {
-  BarChart3,
   Bell,
-  Gavel,
-  HelpCircle,
-  History,
-  LogOut,
   Menu,
-  Mic,
   Search,
   Settings,
-  Users,
+  UserRound,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useAppSelector } from "../hooks";
+import { useAppDispatch, useAppSelector } from "../hooks";
+import { mergeEntities } from "../../features/session/sessionSlice";
 import { cn } from "../../shared/lib/utils";
 
 type View = "session" | "summary" | "analytics" | "history" | "compliance" | "team";
@@ -21,16 +16,14 @@ type View = "session" | "summary" | "analytics" | "history" | "compliance" | "te
 type AppShellProps = {
   activeView: View;
   onViewChange: (view: View) => void;
-  onLogout?: () => void;
   children: React.ReactNode;
 };
 
 const nav = [
-  { id: "session" as const, label: "Live Session", icon: Mic },
-  { id: "summary" as const, label: "Records", icon: History },
-  { id: "compliance" as const, label: "Compliance", icon: Gavel },
-  { id: "analytics" as const, label: "Insights", icon: BarChart3 },
-  { id: "team" as const, label: "Team", icon: Users, mapTo: "session" as const },
+  { id: "session" as const, label: "Dashboard" },
+  { id: "summary" as const, label: "Records" },
+  { id: "compliance" as const, label: "Compliance" },
+  { id: "analytics" as const, label: "Insights" },
 ];
 
 type TopTab = { id: View; label: string };
@@ -41,7 +34,7 @@ const topTabs: TopTab[] = [
 ];
 
 function useCallTimer() {
-  const [seconds, setSeconds] = useState(252);
+  const [seconds, setSeconds] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => clearInterval(id);
@@ -51,12 +44,24 @@ function useCallTimer() {
   return `${mm}:${ss}`;
 }
 
-export function AppShell({ activeView, onViewChange, onLogout, children }: AppShellProps) {
+export function AppShell({ activeView, onViewChange, children }: AppShellProps) {
+  const dispatch = useAppDispatch();
   const timer = useCallTimer();
   const language = useAppSelector((state) => state.session.language);
+  const customerName = useAppSelector((state) => state.session.entities.customerName);
   const escalationAlert = useAppSelector((state) => state.session.escalationAlert);
   const connectionStatus = useAppSelector((state) => state.session.connectionStatus);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [customerNameDraft, setCustomerNameDraft] = useState(customerName);
+
+  useEffect(() => {
+    setCustomerNameDraft(customerName);
+  }, [customerName]);
+
+  const commitCustomerName = () => {
+    const name = customerNameDraft.trim();
+    dispatch(mergeEntities({ customerName: name }));
+  };
 
   // Close sidebar on route change
   const handleNavClick = (view: View) => {
@@ -79,6 +84,13 @@ export function AppShell({ activeView, onViewChange, onLogout, children }: AppSh
     };
   }, [sidebarOpen]);
 
+  useEffect(() => {
+    document.body.dataset.sidebarOpen = sidebarOpen ? "true" : "false";
+    return () => {
+      delete document.body.dataset.sidebarOpen;
+    };
+  }, [sidebarOpen]);
+
   // ── Sidebar Content (shared between desktop drawer + mobile drawer) ──
   const sidebarContent = (
     <>
@@ -98,19 +110,16 @@ export function AppShell({ activeView, onViewChange, onLogout, children }: AppSh
 
       <nav className="flex flex-1 flex-col gap-1">
         {nav.map((item) => {
-          const Icon = item.icon;
-          const targetView = ("mapTo" in item && item.mapTo) ? item.mapTo : item.id;
-          const active = item.id === activeView || targetView === activeView;
+          const active = item.id === activeView;
           return (
             <button
               key={item.id}
-              onClick={() => handleNavClick(targetView as View)}
+              onClick={() => handleNavClick(item.id)}
               className={cn(
-                "relative flex h-11 items-center gap-3 px-6 text-left text-xs font-medium uppercase text-slate-600 transition-colors hover:bg-slate-100",
+                "relative flex h-11 items-center px-6 text-left text-xs font-semibold uppercase tracking-[0.04em] text-slate-600 transition-colors hover:bg-slate-100",
                 active && "border-r-4 border-blue-900 bg-blue-50 text-blue-900"
               )}
             >
-              <Icon className="h-4 w-4" />
               {item.label}
               {/* Escalation badge on Insights */}
               {item.id === "analytics" && escalationAlert && (
@@ -123,20 +132,6 @@ export function AppShell({ activeView, onViewChange, onLogout, children }: AppSh
           );
         })}
       </nav>
-
-      <div className="mt-auto border-t border-slate-200 pt-4">
-        <button className="flex h-11 w-full items-center gap-3 px-6 text-xs font-medium uppercase text-slate-600 hover:bg-slate-100">
-          <HelpCircle className="h-4 w-4" />
-          Support
-        </button>
-        <button 
-          onClick={onLogout}
-          className="flex h-11 w-full items-center gap-3 px-6 text-xs font-medium uppercase text-slate-600 hover:bg-slate-100"
-        >
-          <LogOut className="h-4 w-4" />
-          Logout
-        </button>
-      </div>
     </>
   );
 
@@ -205,6 +200,25 @@ export function AppShell({ activeView, onViewChange, onLogout, children }: AppSh
 
           {/* Center: Account search + language + timer */}
           <div className="hidden md:flex items-center gap-3 rounded border border-outline-variant bg-surface px-3 py-1.5">
+            {activeView === "session" && (
+              <>
+                <div className="flex items-center gap-2">
+                  <UserRound className="h-4 w-4 text-outline" />
+                  <input
+                    type="text"
+                    value={customerNameDraft}
+                    onChange={(event) => setCustomerNameDraft(event.target.value)}
+                    onBlur={commitCustomerName}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                    }}
+                    placeholder="Customer name"
+                    className="w-40 border-none bg-transparent p-0 text-sm font-medium text-on-surface placeholder:text-outline focus:outline-none focus:ring-0"
+                  />
+                </div>
+                <div className="h-4 w-px bg-outline-variant" />
+              </>
+            )}
             <div className="flex items-center gap-2">
               <Search className="h-4 w-4 text-outline" />
               <input
